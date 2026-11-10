@@ -176,7 +176,7 @@ doppio clic → Installa. Le due cose convivono: la sentinella resta una sola.
 | Simili | `src/agenti/simili.js` | impronta visiva (dHash) per le foto quasi uguali |
 | Luoghi | `src/agenti/luoghi.js` + `src/dati/` | comune o città dalle coordinate GPS, senza internet |
 | **Cervello** | `src/jarvis.js` | coordina gli agenti, un lavoro alla volta |
-| Installatore | `installa.ps1`, `strumenti/avvio_nascosto.vbs` | installazione da GitHub, icone, avvio automatico |
+| Installatore | `installa.ps1` (avvio nascosto con `node src/cli.js sfondo sorveglia`) | installazione da GitHub, icone, avvio automatico |
 | Ponte con Claude (facoltativo) | `src/server.js` | server MCP con 13 strumenti |
 
 Formati: JPG, PNG, HEIC/HEIF (iPhone), WebP, GIF, TIFF, BMP, AVIF, RAW (DNG, CR2, CR3, NEF, ARW, RAF, ORF, RW2…), video MP4, MOV, M4V, 3GP, AVI, MKV, MTS, WMV, WebM.

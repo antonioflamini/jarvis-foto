@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { numero, byteLeggibili } from './util.js';
 import { RADICE_PROGETTO } from './config.js';
+import { eseguiPowerShell } from './agenti/esploratore.js';
 
 // Registro su file (jarvis.log nella cartella del programma), utile quando gira nascosto.
 const FILE_LOG = path.join(RADICE_PROGETTO, 'jarvis.log');
@@ -31,6 +32,29 @@ function registroSuFile() {
 }
 
 const [comando, ...resto] = process.argv.slice(2);
+
+// "sfondo <comando>": avvia il comando in un processo nascosto e termina subito.
+// Sostituisce il vecchio avvio_nascosto.vbs (VBScript sta per essere tolto da Windows).
+if (comando === 'sfondo') {
+  const { spawn } = await import('node:child_process');
+  const figlio = spawn(process.execPath, [path.join(RADICE_PROGETTO, 'src', 'cli.js'), ...(resto.length ? resto : ['sorveglia'])],
+    { cwd: RADICE_PROGETTO, detached: true, windowsHide: true, stdio: 'ignore' });
+  figlio.unref();
+  process.exit(0);
+}
+
+// Chi ha aggiornato dalla 1.2.0 ha ancora l'avvio automatico con VBScript: lo converto una volta sola.
+async function aggiornaAvvioAutomatico() {
+  if (process.platform !== 'win32' || !fs.existsSync(path.join(RADICE_PROGETTO, 'node', 'node.exe'))) return;
+  const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
+  const script = `$f = Join-Path ([Environment]::GetFolderPath('Startup')) 'JARVIS Sentinella.lnk'; if (Test-Path $f) { ` +
+    `$l = (New-Object -ComObject WScript.Shell).CreateShortcut($f); if ($l.TargetPath -like '*wscript*') { ` +
+    `$l.TargetPath = ${q(process.execPath)}; $l.Arguments = ${q(`"${path.join(RADICE_PROGETTO, 'src', 'cli.js')}" sfondo sorveglia`)}; ` +
+    `$l.WorkingDirectory = ${q(RADICE_PROGETTO)}; $l.WindowStyle = 7; $l.Save(); 'convertito' } }`;
+  const out = await eseguiPowerShell(script);
+  if (out && out.includes('convertito')) registra('Avvio automatico aggiornato: ora parte senza VBScript');
+}
+
 const flag = (f) => resto.includes(f);
 const arg = resto.find((a) => !a.startsWith('--'));
 const cfg = caricaConfig(flag('--no-effetti') ? { effetti: false } : {});
@@ -113,6 +137,7 @@ try {
       if (esito !== true) throw new Error('La sorveglianza dei supporti funziona solo su Windows.');
       registroSuFile();
       registra(`Sentinella avviata · archivio ${cfg.archivio}`);
+      aggiornaAvvioAutomatico().catch(() => {});
       console.log(`  ${C.g}● In ascolto.${C.x} Inserisci una scheda o una chiavetta, o copia file in Arrivi: ti chiederò cosa fare. (Ctrl+C per uscire)`);
       await jarvis.regista.avvia();
       jarvis.regista.server?.ref();

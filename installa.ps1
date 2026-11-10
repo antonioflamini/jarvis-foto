@@ -144,14 +144,15 @@ try {
   # ---------------------------------------------------------------
   $ws = New-Object -ComObject WScript.Shell
   $icona = Join-Path $Dest 'icon.ico'
-  $vbs = Join-Path $Dest 'strumenti\avvio_nascosto.vbs'
-  $wscript = Join-Path $env:WINDIR 'System32\wscript.exe'
-  function Collegamento([string]$file, [string]$target, [string]$argomenti, [string]$descrizione) {
+  # La sentinella parte con Node.js in modo nascosto ("sfondo"): non serve piu' VBScript
+  $argSentinella = "`"$(Join-Path $Dest 'src\cli.js')`" sfondo sorveglia"
+  function Collegamento([string]$file, [string]$target, [string]$argomenti, [string]$descrizione, [int]$finestra = 1) {
     $l = $ws.CreateShortcut($file)
     $l.TargetPath = $target
     $l.Arguments = $argomenti
     $l.WorkingDirectory = $Dest
     $l.Description = $descrizione
+    $l.WindowStyle = $finestra
     if (Test-Path $icona) { $l.IconLocation = "$icona,0" }
     $l.Save()
   }
@@ -172,14 +173,14 @@ try {
   Collegamento (Join-Path $menu 'Aggiorna JARVIS.lnk') (Join-Path $Dest 'aggiorna.bat') '' 'Scarica la nuova versione da GitHub'
   Collegamento (Join-Path $menu 'Disinstalla JARVIS.lnk') (Join-Path $Dest 'disinstalla.bat') '' 'Rimuove il programma (le foto restano)'
   Collegamento (Join-Path $menu 'Apri archivio foto.lnk') $config.archivio '' 'Archivio JARVIS'
-  Collegamento (Join-Path $esecuzione 'JARVIS Sentinella.lnk') $wscript "`"$vbs`" sorveglia" 'JARVIS resta in ascolto di schede, chiavette e cartella Arrivi'
+  Collegamento (Join-Path $esecuzione 'JARVIS Sentinella.lnk') $Node $argSentinella 'JARVIS resta in ascolto di schede, chiavette e cartella Arrivi' 7
   Fatto 'Icone sul desktop e nel menu Start'
   Fatto 'Avvio automatico con Windows'
 
   # ---------------------------------------------------------------
   # 6. Avvio subito la sentinella e controllo che funzioni
   # ---------------------------------------------------------------
-  Start-Process -FilePath $wscript -ArgumentList "`"$vbs`" sorveglia"
+  Start-Process -FilePath $Node -ArgumentList $argSentinella -WorkingDirectory $Dest -WindowStyle Hidden
   Start-Sleep -Seconds 3
   $attiva = Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
     Where-Object { $_.CommandLine -like '*JARVIS-Foto*sorveglia*' }

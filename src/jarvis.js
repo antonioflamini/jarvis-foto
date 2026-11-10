@@ -11,11 +11,12 @@ import {
 } from './agenti/archivista.js';
 import { backup, verificaBackup } from './agenti/custode.js';
 import { Regista } from './agenti/regista.js';
-import { contaMultimediali, sentinellaInEsecuzione } from './agenti/sentinella.js';
+import { contaMultimediali, sentinellaInEsecuzione, SOGLIA_SPAZIO_BASSO } from './agenti/sentinella.js';
 import { leggiJSON, numero, byteLeggibili, saluto, nomeSicuro, cartellaMese, ora, esiste, inParallelo } from './util.js';
 import { tipoDi } from './agenti/esploratore.js';
 
-export const VERSIONE = '1.2.0';
+export const VERSIONE = '1.3.0';
+const MARGINE_SPAZIO = 1024 ** 3; // dopo un'importazione devono restare almeno 1 GB liberi
 
 export class Jarvis {
   constructor(cfg) {
@@ -25,6 +26,27 @@ export class Jarvis {
     this.ultimoEsito = null;
     this.progresso = null;
     fs.mkdirSync(cfg.arrivi, { recursive: true });
+  }
+
+  // Byte liberi sul disco dell'archivio (null se non si riesce a leggerli). Sostituibile nei collaudi.
+  leggiSpazio = async () => {
+    const sf = await fsp.statfs(this.cfg.archivio).catch(() => null);
+    return sf ? sf.bavail * sf.bsize : null;
+  };
+
+  // Prima di copiare: c'è posto? Meglio fermarsi subito che riempire il disco a metà lavoro.
+  async #controllaSpazio(byteNecessari) {
+    if (!byteNecessari) return;
+    const libero = await this.leggiSpazio();
+    if (libero !== null && libero < byteNecessari + MARGINE_SPAZIO) {
+      throw new Error(`Spazio insufficiente sul disco dell'archivio: servono circa ${byteLeggibili(byteNecessari)}, ` +
+        `liberi ${byteLeggibili(libero)}. Libera spazio o sposta l'archivio su un disco più grande. Non ho copiato nulla.`);
+    }
+  }
+
+  async #avvisoSpazio() {
+    const libero = await this.leggiSpazio().catch(() => null);
+    return libero !== null && libero < SOGLIA_SPAZIO_BASSO ? `Sul disco dell'archivio restano solo ${byteLeggibili(libero)} liberi.` : null;
   }
 
   emetti = (e) => {
@@ -125,6 +147,11 @@ export class Jarvis {
       const indice = new Indice(this.cfg.archivio);
       await indice.carica(this.emetti, this.cfg.simili);
       const pianificazione = await pianifica(file, this.cfg, indice, this.emetti);
+      // Spostare dentro lo stesso disco non occupa spazio; copiare (o spostare da un altro disco) sì.
+      const radice = (p) => path.parse(path.resolve(p)).root.toLowerCase();
+      if (modalita === 'copia' || radice(sorgente) !== radice(this.cfg.archivio)) {
+        await this.#controllaSpazio(pianificazione.piano.filter((p) => p.esito === 'nuovo').reduce((t, p) => t + (p.dimensione || 0), 0));
+      }
       for (const g of pianificazione.giornate) this.emetti({ t: 'giornata', giorno: g.giorno, nome: g.nome });
       this.emetti({ t: 'fase', fase: 'archiviazione', testo: 'Archiviazione in corso', n: pianificazione.piano.length });
       const riepilogo = await esegui(pianificazione, this.cfg, indice, {
@@ -133,7 +160,10 @@ export class Jarvis {
       riepilogo.giornate = pianificazione.giornate.map((g) => g.nome);
       riepilogo.statistiche = await statisticheArchivio(this.cfg.archivio);
       const p = await this.promemoriaBackup();
-      if (p?.daFare) riepilogo.promemoria = p.testo;
+      const spazio = await this.#avvisoSpazio();
+      if (spazio) this.regista.parla('Attenzione: lo spazio sul disco sta finendo.');
+      const note = [p?.daFare ? p.testo : null, spazio].filter(Boolean);
+      if (note.length) riepilogo.promemoria = note.join(' ');
       return { modo: 'importa', esito: 'ok', ...riepilogo };
     } finally {
       await pulisci();
@@ -192,6 +222,7 @@ export class Jarvis {
       this.emetti({ t: 'fase', fase: 'copia', testo: `Copio da ${radice} nella cartella Arrivi` });
       const { file, pulisci } = await esplora(radice, { escludi: this.#escluse, suProgresso: (n) => this.emetti({ t: 'scansione', trovati: n }) });
       try {
+        await this.#controllaSpazio(file.reduce((t, f) => t + (f.dimensione || 0), 0));
         let fatti = 0;
         await inParallelo(file, 3, async (f) => {
           const rel = f.origineZip ? path.join(path.parse(f.origineZip).name, path.basename(f.percorso)) : path.relative(path.resolve(radice), f.percorso);
@@ -284,7 +315,7 @@ export class Jarvis {
     const ub = await leggiJSON(path.join(this.cfg.archivio, '_JARVIS', 'ultimo_backup.json'), null);
     const ui = await leggiJSON(path.join(this.cfg.archivio, '_JARVIS', 'ultima_importazione.json'), null);
     if (!ui && !ub) return null;
-    if (!ub) return { daFare: true, giorni: null, testo: 'Non hai ancora fatto nessun backup delle foto: collega l\'hard disk esterno e chiedi "fai il backup".' };
+    if (!ub) return { daFare: true, giorni: null, testo: 'Non hai ancora fatto nessun backup delle foto: collega l\'hard disk esterno e fai il backup (icona JARVIS Foto, tasto 3).' };
     const giorni = Math.floor((Date.now() - new Date(ub.quando)) / 86400000);
     const novita = ui && new Date(ui.quando) > new Date(ub.quando) && ui.archiviati > 0;
     if (giorni >= 30) return { daFare: true, giorni, testo: `L'ultimo backup è di ${giorni} giorni fa: è ora di aggiornarlo.` };

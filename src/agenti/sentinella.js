@@ -8,7 +8,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { tipoDi, eseguiPowerShell } from './esploratore.js';
-import { numero } from '../util.js';
+import { numero, byteLeggibili } from '../util.js';
 
 const SALTA = new Set(['$recycle.bin', 'system volume information', 'windows', 'program files', 'program files (x86)', 'jarvis_backup', '.trashes', '.spotlight-v100']);
 
@@ -36,7 +36,16 @@ export function chiediWindows(messaggio) {
   });
 }
 
+// Avviso informativo (solo OK), senza bloccare la sentinella.
+export function avvisaWindows(messaggio) {
+  const script = 'Add-Type -AssemblyName System.Windows.Forms; $f=New-Object System.Windows.Forms.Form; $f.TopMost=$true;' +
+    "[void][System.Windows.Forms.MessageBox]::Show($f, $env:JARVIS_MSG, 'J.A.R.V.I.S. Foto', 'OK', 'Information')";
+  execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-Command', script],
+    { env: { ...process.env, JARVIS_MSG: messaggio }, windowsHide: true, timeout: 60 * 60000 }, () => {});
+}
+
 export const FILE_BLOCCO_SENTINELLA = path.join(os.tmpdir(), 'jarvis-foto-sentinella.lock');
+export const SOGLIA_SPAZIO_BASSO = 5 * 1024 ** 3; // sotto i 5 GB liberi JARVIS avvisa
 
 // C'è una sentinella attiva in un altro processo? (letta dal file di blocco: serve alla diagnostica del menu)
 export function sentinellaInEsecuzione(file = FILE_BLOCCO_SENTINELLA) {
@@ -87,6 +96,46 @@ export class Sentinella {
     this.attesaArrivi = opz.attesaArrivi ?? 8000; // aspetta che la copia nella cartella sia finita
     this.arrivi = { conteggio: 0, stabileDa: 0, chiesto: 0 };
     this.fileBlocco = opz.fileBlocco ?? FILE_BLOCCO_SENTINELLA;
+    // Promemoria (backup da fare, spazio quasi finito): al massimo uno ogni 7 giorni per tipo,
+    // e non subito all'accensione del PC.
+    this.avvisa = opz.avvisa || avvisaWindows;
+    this.attesaPromemoria = opz.attesaPromemoria ?? 10 * 60000;
+    this.ripetiPromemoria = opz.ripetiPromemoria ?? 7 * 86400000;
+    this.avviataIl = Date.now();
+    this.ultimoControlloPromemoria = 0;
+  }
+
+  // Avvisa (senza bloccare nulla) se il backup è vecchio o mai fatto, o se il disco dell'archivio è quasi pieno.
+  async controllaPromemoria(adesso = Date.now()) {
+    const j = this.jarvis;
+    if (j.lavoroInCorso || adesso - this.avviataIl < this.attesaPromemoria) return [];
+    if (adesso - this.ultimoControlloPromemoria < 3600000) return []; // controllo al massimo una volta all'ora
+    this.ultimoControlloPromemoria = adesso;
+    const fileAvvisi = path.join(j.cfg.archivio, '_JARVIS', 'promemoria_avvisi.json');
+    let avvisi = {};
+    try { avvisi = JSON.parse(await fsp.readFile(fileAvvisi, 'utf8')); } catch { /* primo avviso */ }
+    const scaduto = (k) => !avvisi[k] || adesso - new Date(avvisi[k]).getTime() >= this.ripetiPromemoria;
+    const fatti = [];
+
+    const p = await j.promemoriaBackup().catch(() => null);
+    if (p?.daFare && (p.giorni === null || p.giorni >= 7) && scaduto('backup')) {
+      this.avvisa(`${p.testo}\n\nSe hai già fatto un backup con JARVIS, ti basta collegare il disco: ti chiederò io se aggiornarlo.`);
+      j.regista.parla('Promemoria: è ora di fare il backup delle foto.');
+      avvisi.backup = new Date(adesso).toISOString();
+      fatti.push('backup');
+    }
+    const libero = await j.leggiSpazio().catch(() => null);
+    if (libero !== null && libero < SOGLIA_SPAZIO_BASSO && scaduto('spazio')) {
+      this.avvisa(`Sul disco dell'archivio restano solo ${byteLeggibili(libero)} liberi.\n\n` +
+        'Libera un po\' di spazio (per esempio svuota il Cestino) o sposta l\'archivio su un disco più grande.');
+      avvisi.spazio = new Date(adesso).toISOString();
+      fatti.push('spazio');
+    }
+    if (fatti.length) {
+      await fsp.mkdir(path.dirname(fileAvvisi), { recursive: true });
+      await fsp.writeFile(fileAvvisi, JSON.stringify(avvisi, null, 2));
+    }
+    return fatti;
   }
 
   // Una sola sentinella per volta sul PC (evita domande doppie se è aperto anche Claude Desktop).
@@ -148,6 +197,7 @@ export class Sentinella {
         await this.valuta(u);
       }
       await this.controllaArrivi();
+      await this.controllaPromemoria().catch(() => {});
     } finally {
       this.occupata = false;
     }

@@ -216,6 +216,41 @@ try {
   await prova('promemoria: nessun backup ancora fatto', async () => {
     const p = await j.promemoriaBackup();
     assert.equal(p.daFare, true);
+    assert.match(p.testo, /tasto 3/);
+  });
+
+  await prova('sentinella: promemoria del backup e dello spazio, al massimo uno a settimana', async () => {
+    const avvisi = [];
+    const s = new Sentinella(j, { attesaPromemoria: 0, avvisa: (m) => avvisi.push(m) });
+    const vero = j.leggiSpazio;
+    j.leggiSpazio = async () => 2 * 1024 ** 3; // 2 GB liberi
+    try {
+      assert.deepEqual(await s.controllaPromemoria(), ['backup', 'spazio']);
+      assert.match(avvisi[1], /restano solo/);
+      s.ultimoControlloPromemoria = 0;
+      assert.deepEqual(await s.controllaPromemoria(), [], 'non ripete prima di 7 giorni');
+      s.ultimoControlloPromemoria = 0;
+      assert.deepEqual(await s.controllaPromemoria(Date.now() + 8 * 86400000), ['backup', 'spazio']);
+    } finally {
+      j.leggiSpazio = vero;
+      fs.rmSync(path.join(archivio, '_JARVIS', 'promemoria_avvisi.json'), { force: true });
+    }
+  });
+
+  await prova('spazio insufficiente: si ferma prima di copiare', async () => {
+    const nuova = path.join(tmp, 'sorgente_grande');
+    scrivi(nuova, 'IMG_7000.JPG', jpeg({ data: '2026:02:01 10:00:00', seme: 7000 }));
+    const vero = j.leggiSpazio;
+    j.leggiSpazio = async () => 100 * 1024 ** 2; // 100 MB liberi
+    try {
+      const r = await j.importa(nuova);
+      assert.equal(r.esito, 'errore');
+      assert.match(r.errore, /Spazio insufficiente/);
+      assert.ok(!esiste('Foto/2026/02 Febbraio'));
+      assert.ok(fs.existsSync(path.join(nuova, 'IMG_7000.JPG')));
+    } finally {
+      j.leggiSpazio = vero;
+    }
   });
 
   await prova('cartella Arrivi: svuotata e smistata', async () => {

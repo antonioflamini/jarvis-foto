@@ -102,7 +102,7 @@ if "%scelta%"=="8" (
   goto menu
 )
 if "%scelta%"=="9" (
-  start "" wscript.exe "%~dp0strumenti\avvio_nascosto.vbs" sorveglia
+  "%NODE%" src\cli.js sfondo sorveglia
   echo    Sentinella avviata in background.
   timeout /t 2 >nul
   goto menu
