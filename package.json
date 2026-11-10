@@ -1,0 +1,35 @@
+{
+  "name": "jarvis-foto",
+  "version": "1.2.0",
+  "description": "JARVIS Foto - archivista personale di foto e video: importa, ordina, rinomina e fa backup, con pannello olografico in tempo reale. Funziona in locale, anche da Claude Desktop.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node test/collaudo.js"
+  },
+  "author": "Antonio Flamini",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "archiver": "^8.0.0",
+    "exifr": "^7.1.3",
+    "jpeg-js": "^0.4.4",
+    "yauzl": "^3.4.0",
+    "zod": "^4.6.7"
+  },
+  "type": "module",
+  "bin": {
+    "jarvis-foto": "src/cli.js"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "keywords": [
+    "foto",
+    "archivio",
+    "backup",
+    "mcp",
+    "claude",
+    "jarvis"
+  ]
+}

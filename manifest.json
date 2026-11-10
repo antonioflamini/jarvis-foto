@@ -1,0 +1,164 @@
+{
+  "manifest_version": "0.3",
+  "name": "jarvis-foto",
+  "display_name": "JARVIS Foto",
+  "version": "1.2.0",
+  "description": "Il tuo archivista personale: importa foto e video da cartelle, zip, schede e dalla cartella Arrivi, li ordina per data e luogo e fa il backup su disco esterno, con pannello olografico.",
+  "long_description": "JARVIS Foto lavora interamente sul tuo computer: le foto non vengono mai caricate su internet.\n\n- **Importa** da cartelle, file zip (anche annidati), chiavette, schede SD e telefoni.\n- **Ordina** per data vera di scatto (EXIF, metadati video, nome del file) in Foto/Anno/Mese, con cartelle dedicate per le giornate piene di foto, più Video e Screenshot separati.\n- **Rinomina** in modo uniforme: 2026-11-10_14-35-02_iPhone15.jpg.\n- **Cartella Arrivi**: butta lì foto del telefono, zip, esportazioni di Google Foto: JARVIS le smista.\n- **Ti chiede** se importare quando inserisci una scheda SD o una chiavetta (e se aggiornare il backup quando colleghi il disco).\n- **Luoghi**: le giornate con tante foto prendono il nome del comune dal GPS (es. \"Ponza\"), senza internet.\n- **Foto quasi uguali** (copie WhatsApp, raffiche) messe in \"Da scegliere\", mai cancellate.\n- **Live Photo** dell'iPhone tenute insieme; date corrette anche per Google Takeout e video Android.\n- **Annulla** l'ultima importazione in un attimo.\n- **Scarta i doppioni** con impronta SHA-256, anche se hanno nomi diversi.\n- **Backup** zippato e incrementale su hard disk esterno, uno zip per mese, verificato.\n- **Pannello olografico** in stile JARVIS con le foto che volano nella linea del tempo, e voce italiana.\n\nDi base copia e non tocca gli originali.",
+  "author": {
+    "name": "Antonio Flamini",
+    "url": "https://github.com/antonioflamini"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/antonioflamini/jarvis-foto"
+  },
+  "homepage": "https://github.com/antonioflamini/jarvis-foto",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "src/server.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/src/server.js"
+      ],
+      "env": {
+        "JARVIS_ARCHIVIO": "${user_config.archivio}",
+        "JARVIS_BACKUP": "${user_config.backup}",
+        "JARVIS_NOME": "${user_config.nome}",
+        "JARVIS_EFFETTI": "${user_config.effetti}",
+        "JARVIS_VOCE": "${user_config.voce}",
+        "JARVIS_SIMILI": "${user_config.simili}",
+        "JARVIS_SORVEGLIANZA": "${user_config.sorveglianza}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "jarvis_stato",
+      "description": "Stato dell'archivio, lavoro in corso, ultima importazione e ultimo backup"
+    },
+    {
+      "name": "jarvis_rileva_supporti",
+      "description": "Elenca chiavette, schede SD, dischi e telefoni collegati"
+    },
+    {
+      "name": "jarvis_anteprima",
+      "description": "Simula un'importazione senza modificare nulla"
+    },
+    {
+      "name": "jarvis_importa",
+      "description": "Importa, ordina, rinomina e archivia foto e video"
+    },
+    {
+      "name": "jarvis_backup",
+      "description": "Backup zippato e incrementale su disco esterno"
+    },
+    {
+      "name": "jarvis_verifica_backup",
+      "description": "Verifica l'integrità del backup"
+    },
+    {
+      "name": "jarvis_dai_nome_giornata",
+      "description": "Dà un nome a una giornata (es. Compleanno, Raccolta AVIS)"
+    },
+    {
+      "name": "jarvis_apri_pannello",
+      "description": "Apre il pannello olografico nel browser"
+    },
+    {
+      "name": "jarvis_ricostruisci_indice",
+      "description": "Ricalcola l'indice dei doppioni dell'archivio"
+    },
+    {
+      "name": "jarvis_importa_arrivi",
+      "description": "Sistema tutto quello che c'è nella cartella Arrivi"
+    },
+    {
+      "name": "jarvis_annulla_ultima_importazione",
+      "description": "Annulla l'ultima importazione"
+    },
+    {
+      "name": "jarvis_da_scegliere",
+      "description": "Elenca le foto quasi uguali da scegliere"
+    },
+    {
+      "name": "jarvis_diagnostica",
+      "description": "Controlla l'installazione sul PC"
+    }
+  ],
+  "keywords": [
+    "archivio",
+    "backup",
+    "exif",
+    "foto",
+    "gps",
+    "italiano",
+    "jarvis",
+    "live photo",
+    "takeout"
+  ],
+  "license": "MIT",
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": [
+      "win32",
+      "darwin",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.17.0"
+    }
+  },
+  "user_config": {
+    "archivio": {
+      "type": "directory",
+      "title": "Cartella principale dell'archivio",
+      "description": "Dove JARVIS mette in ordine tutte le foto. Se non esiste la crea.",
+      "default": "${HOME}/Pictures/JARVIS_Foto",
+      "required": false
+    },
+    "backup": {
+      "type": "directory",
+      "title": "Disco del backup (facoltativo)",
+      "description": "L'hard disk esterno o la cartella dove salvare il backup zippato, es. F:\\",
+      "required": false
+    },
+    "nome": {
+      "type": "string",
+      "title": "Come ti chiama JARVIS",
+      "description": "Usato nel saluto vocale e nel pannello",
+      "default": "Antonio",
+      "required": false
+    },
+    "effetti": {
+      "type": "boolean",
+      "title": "Pannello olografico",
+      "description": "Apre il pannello animato nel browser durante il lavoro",
+      "default": true,
+      "required": false
+    },
+    "voce": {
+      "type": "boolean",
+      "title": "Voce di JARVIS",
+      "description": "JARVIS annuncia inizio e fine del lavoro con la sintesi vocale di Windows",
+      "default": true,
+      "required": false
+    },
+    "sorveglianza": {
+      "type": "boolean",
+      "title": "Chiedi quando inserisco una scheda",
+      "description": "Quando inserisci una scheda SD o una chiavetta con foto, JARVIS chiede se importarle (le copia in Arrivi e le sistema). Chiede anche se aggiornare il backup quando colleghi il disco. Solo Windows.",
+      "default": true,
+      "required": false
+    },
+    "simili": {
+      "type": "boolean",
+      "title": "Separa le foto quasi uguali",
+      "description": "Copie ridotte e raffiche vanno nella cartella \"Da scegliere\" invece che nella linea del tempo",
+      "default": true,
+      "required": false
+    }
+  }
+}

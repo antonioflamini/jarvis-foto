@@ -1,0 +1,84 @@
+name: Collaudo e rilascio
+
+# - a ogni modifica: collaudo automatico su Windows, Linux e Mac
+# - a ogni Release pubblicata: crea il pacchetto per Windows (con Node.js incluso)
+#   JARVIS-Foto-Windows.zip e l'estensione facoltativa jarvis-foto.mcpb, e li allega alla Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  collaudo:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test
+
+  pacchetto-windows:
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    needs: collaudo
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Componenti
+        run: npm ci --omit=dev
+
+      - name: Estensione facoltativa per Claude Desktop
+        # facoltativa: se non si crea, il pacchetto per Windows esce lo stesso
+        continue-on-error: true
+        run: npx -y @anthropic-ai/mcpb pack . jarvis-foto.mcpb
+
+      - name: Node.js portatile per Windows (verificato con SHA-256)
+        run: |
+          BASE=https://nodejs.org/dist/latest-v22.x
+          curl -fsSL "$BASE/SHASUMS256.txt" -o SHASUMS256.txt
+          FILE=$(awk '/-win-x64\.zip$/ {print $2}' SHASUMS256.txt)
+          curl -fsSLO "$BASE/$FILE"
+          grep " $FILE\$" SHASUMS256.txt | sha256sum -c -
+          unzip -q "$FILE"
+          mkdir -p pacchetto/node
+          cp "${FILE%.zip}/node.exe" "${FILE%.zip}/LICENSE" pacchetto/node/
+
+      - name: Pacchetto JARVIS-Foto-Windows.zip
+        run: |
+          rsync -a --exclude .git --exclude .github --exclude test --exclude pacchetto \
+            --exclude 'node-v*' --exclude '*.mcpb' --exclude SHASUMS256.txt ./ pacchetto/
+          (cd pacchetto && zip -qr ../JARVIS-Foto-Windows.zip .)
+          ls -la JARVIS-Foto-Windows.zip
+          ls -la jarvis-foto.mcpb || echo "Estensione per Claude Desktop non creata (facoltativa)"
+
+      - name: Allega alla Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            JARVIS-Foto-Windows.zip
+            jarvis-foto.mcpb
+
+      - name: Conserva come artefatto (avvio manuale)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-Foto-Windows
+          path: |
+            JARVIS-Foto-Windows.zip
+            jarvis-foto.mcpb

@@ -1,0 +1,10 @@
+node_modules/
+*.mcpb
+jarvis.config.json
+foto_prova/
+*.log
+.DS_Store
+Thumbs.db
+jarvis.log*
+pacchetto/
+node/
