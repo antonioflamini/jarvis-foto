@@ -41,7 +41,8 @@ export function caricaConfig(sovrascritture = {}) {
   const radice = path.resolve(archivio);
   return {
     archivio: radice,
-    arrivi: path.join(radice, 'Arrivi'),
+    // La cartella Arrivi può stare su un altro disco (es. sul PC quando l'archivio è su un disco esterno)
+    arrivi: path.resolve(pulito(sovrascritture.arrivi) ?? pulito(env.JARVIS_ARRIVI) ?? pulito(f.arrivi) ?? path.join(radice, 'Arrivi')),
     backup: pulito(sovrascritture.backup) ?? pulito(env.JARVIS_BACKUP) ?? pulito(f.backup) ?? '',
     effetti: siNo(sovrascritture.effetti ?? pulito(env.JARVIS_EFFETTI) ?? f.effetti, true),
     voce: siNo(sovrascritture.voce ?? pulito(env.JARVIS_VOCE) ?? f.voce, true),

@@ -175,6 +175,16 @@ export class Sentinella {
     if (n === 0) { a.conteggio = 0; a.chiesto = 0; return null; }
     if (n !== a.conteggio) { a.conteggio = n; a.stabileDa = Date.now(); return null; }
     if (Date.now() - a.stabileDa < this.attesaArrivi || a.chiesto === n) return null;
+    if (!j.archivioDisponibile()) {
+      // Il disco dell'archivio è spento: lo dico una volta, e appena lo accendi chiedo se sistemare.
+      if (a.avvisatoSpento !== n) {
+        a.avvisatoSpento = n;
+        j.regista.parla('Accendi il disco dell\'archivio per sistemare i nuovi file.');
+        this.avvisa(`Nella cartella Arrivi ci sono ${numero(n)} nuovi file, ma il disco dell'archivio (${j.discoArchivio}) è spento.\n\n` +
+          'Accendilo: appena lo vedo ti chiedo se sistemarli.');
+      }
+      return { azione: 'attesa-disco' };
+    }
     a.chiesto = n;
     j.regista.parla(`Ci sono ${numero(n)} nuovi file nella cartella Arrivi. Li sistemo?`);
     const si = await this.chiedi(`Nella cartella Arrivi ci sono ${numero(n)} nuovi file.\n\nLi sistemo nell'archivio adesso?`);
@@ -225,6 +235,12 @@ export class Sentinella {
     const n = await contaMultimediali(radice);
     if (!n) return { azione: 'ignorata', motivo: 'nessuna foto' };
     const nome = `${radice.replace(/\\$/, '')}${info.nome ? ` (${info.nome})` : ''}`;
+    if (!j.archivioDisponibile()) {
+      j.regista.parla('Per importare devi prima accendere il disco dell\'archivio.');
+      this.avvisa(`Ho trovato ${numero(n)} foto e video su ${nome}, ma il disco dell'archivio (${j.discoArchivio}) è spento.\n\n` +
+        'Accendi il disco, poi togli e reinserisci la scheda o la chiavetta.');
+      return { azione: 'attesa-disco' };
+    }
     j.emetti({ t: 'messaggio', testo: `Rilevato ${nome}: ${numero(n)} foto/video. Attendo conferma…` });
     j.regista.parla(`Ho trovato ${numero(n)} foto e video sul nuovo supporto. Vuoi importarli?`);
     const si = await this.chiedi(

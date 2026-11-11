@@ -15,7 +15,7 @@ import { contaMultimediali, sentinellaInEsecuzione, SOGLIA_SPAZIO_BASSO } from '
 import { leggiJSON, numero, byteLeggibili, saluto, nomeSicuro, cartellaMese, ora, esiste, inParallelo } from './util.js';
 import { tipoDi } from './agenti/esploratore.js';
 
-export const VERSIONE = '1.3.0';
+export const VERSIONE = '1.4.0';
 const MARGINE_SPAZIO = 1024 ** 3; // dopo un'importazione devono restare almeno 1 GB liberi
 
 export class Jarvis {
@@ -25,7 +25,35 @@ export class Jarvis {
     this.lavoroInCorso = null;
     this.ultimoEsito = null;
     this.progresso = null;
-    fs.mkdirSync(cfg.arrivi, { recursive: true });
+    // L'archivio viene creato da solo solo sul disco del PC: su un disco esterno deve già esserci,
+    // così se la lettera di unità cambia non finisce per sbaglio su una chiavetta.
+    const radiceArchivio = path.parse(cfg.archivio).root.toLowerCase();
+    if (radiceArchivio === path.parse(os.homedir()).root.toLowerCase()) {
+      try { fs.mkdirSync(cfg.archivio, { recursive: true }); } catch { /* segnalato da diagnostica */ }
+    }
+    if (this.archivioDisponibile() || !this.#arriviNellArchivio()) {
+      try { fs.mkdirSync(cfg.arrivi, { recursive: true }); } catch { /* disco spento */ }
+    }
+  }
+
+  #arriviNellArchivio() {
+    const a = path.resolve(this.cfg.archivio).toLowerCase();
+    return path.resolve(this.cfg.arrivi).toLowerCase().startsWith(a + path.sep);
+  }
+
+  /** L'archivio è raggiungibile? (falso se è su un disco esterno spento o scollegato) */
+  archivioDisponibile() {
+    return fs.existsSync(this.cfg.archivio);
+  }
+
+  get discoArchivio() {
+    return path.parse(this.cfg.archivio).root.replace(/\\$/, '');
+  }
+
+  #richiediArchivio() {
+    if (!this.archivioDisponibile()) {
+      throw new Error(`Il disco dell'archivio (${this.discoArchivio}) è spento o scollegato: accendilo, aspetta qualche secondo e riprova.`);
+    }
   }
 
   // Byte liberi sul disco dell'archivio (null se non si riesce a leggerli). Sostituibile nei collaudi.
@@ -70,6 +98,7 @@ export class Jarvis {
 
   async #prepara(modo, dettagli, effetti) {
     if (this.lavoroInCorso) throw new Error(`Sto già lavorando (${this.lavoroInCorso.modo}). Aspetta che finisca o chiedimi a che punto sono.`);
+    this.#richiediArchivio();
     this.lavoroInCorso = { modo, inizio: Date.now(), ...dettagli };
     if (effetti ?? this.cfg.effetti) {
       await this.regista.apri();
@@ -96,6 +125,7 @@ export class Jarvis {
   // ---------- Importazione ----------
 
   async anteprima(sorgente) {
+    this.#richiediArchivio();
     this.#controllaSorgente(sorgente);
     const { file, pulisci } = await esplora(sorgente, { escludi: this.#escluse });
     try {
@@ -202,6 +232,7 @@ export class Jarvis {
   // non riconosciuti vanno messi da parte in _JARVIS, mai cancellati.
   async importaArrivi({ effetti, attesaMax = 0 } = {}) {
     const arrivi = this.cfg.arrivi;
+    this.#richiediArchivio();
     fs.mkdirSync(arrivi, { recursive: true });
     const voci = fs.readdirSync(arrivi);
     if (!voci.length) return { modo: 'importa', esito: 'vuoto', testo: 'La cartella Arrivi è vuota: mettici foto, cartelle o zip e riprova.', cartella: arrivi };
@@ -216,7 +247,9 @@ export class Jarvis {
 
   // Modalità usata dalla Sentinella: copia dal supporto in Arrivi, poi sistema da Arrivi.
   async importaDaSupporto(radice, { etichetta = '', effetti, attesaMax = 0 } = {}) {
-    const sotto = path.join(this.cfg.arrivi, nomeSicuro(`${ora()}_${etichetta || radice.replace(/[:\\/]/g, '')}`));
+    // Appoggio temporaneo sempre sul disco dell'archivio (il disco del PC potrebbe non avere spazio)
+    const appoggio = path.join(this.cfg.archivio, 'Arrivi');
+    const sotto = path.join(appoggio, nomeSicuro(`${ora()}_${etichetta || radice.replace(/[:\\/]/g, '')}`));
     await this.#prepara('importa', { sorgente: radice, modalita: 'copia', supporto: true }, effetti);
     return this.#conAttesa(this.#lavoroImportazione(async () => {
       this.emetti({ t: 'fase', fase: 'copia', testo: `Copio da ${radice} nella cartella Arrivi` });
@@ -237,16 +270,15 @@ export class Jarvis {
         await pulisci();
       }
       const r = await this.#flusso(sotto, 'sposta');
-      r.avanzi = await this.#riordinaArrivi(sotto);
+      r.avanzi = await this.#riordinaArrivi(sotto, appoggio);
       r.sorgente = radice;
       return r;
     }), attesaMax);
   }
 
-  async #riordinaArrivi(dir) {
+  async #riordinaArrivi(dir, radiceArrivi = this.cfg.arrivi) {
     const t = ora();
     let spostati = 0;
-    const radiceArrivi = this.cfg.arrivi;
     const cammina = async (d) => {
       for (const v of await fsp.readdir(d, { withFileTypes: true }).catch(() => [])) {
         const p = path.join(d, v.name);
@@ -389,13 +421,17 @@ export class Jarvis {
   // Controllo dell'installazione: utile se qualcosa non funziona sul PC.
   async diagnostica() {
     const d = { versione: VERSIONE, node: process.version, sistema: `${os.type()} ${os.release()} (${process.platform})`, archivio: this.cfg.archivio, controlli: {} };
-    try {
-      await fsp.mkdir(this.cfg.archivio, { recursive: true });
-      const prova = path.join(this.cfg.archivio, `.jarvis-prova-${process.pid}`);
-      await fsp.writeFile(prova, 'ok');
-      await fsp.rm(prova);
-      d.controlli.scritturaArchivio = 'ok';
-    } catch (e) { d.controlli.scritturaArchivio = `ERRORE: ${e.message}`; }
+    if (!this.archivioDisponibile()) {
+      d.controlli.scritturaArchivio = `disco dell'archivio (${this.discoArchivio}) spento o scollegato: accendilo e ripeti la diagnostica`;
+    } else {
+      try {
+        const prova = path.join(this.cfg.archivio, `.jarvis-prova-${process.pid}`);
+        await fsp.writeFile(prova, 'ok');
+        await fsp.rm(prova);
+        d.controlli.scritturaArchivio = 'ok';
+      } catch (e) { d.controlli.scritturaArchivio = `ERRORE: ${e.message}`; }
+    }
+    d.controlli.cartellaArrivi = this.cfg.arrivi;
     const sf = await fsp.statfs(this.cfg.archivio).catch(() => null);
     d.controlli.spazioLibero = sf ? byteLeggibili(sf.bavail * sf.bsize) : 'sconosciuto';
     d.controlli.pannello = (await this.regista.avvia()) || 'ERRORE: nessuna porta libera';

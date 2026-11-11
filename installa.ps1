@@ -136,8 +136,10 @@ try {
     Fatto 'Configurazione esistente mantenuta'
   }
   $config = Get-Content $FileConfig -Raw | ConvertFrom-Json
-  $Arrivi = Join-Path $config.archivio 'Arrivi'
-  New-Item -ItemType Directory -Path $Arrivi -Force | Out-Null
+  # La cartella Arrivi puo' stare sul PC anche quando l'archivio e' su un disco esterno
+  if ($config.PSObject.Properties.Name -contains 'arrivi' -and $config.arrivi) { $Arrivi = $config.arrivi } else { $Arrivi = Join-Path $config.archivio 'Arrivi' }
+  try { New-Item -ItemType Directory -Path $Arrivi -Force -ErrorAction Stop | Out-Null }
+  catch { Avviso "Non riesco a creare $Arrivi (disco dell'archivio spento?). La creo appena il disco e' acceso." }
 
   # ---------------------------------------------------------------
   # 5. Icone: desktop, menu Start, avvio automatico

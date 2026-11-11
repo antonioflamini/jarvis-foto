@@ -370,6 +370,31 @@ try {
     assert.equal(r.archiviati, 0, 'l\'indice segue la cartella rinominata');
   });
 
+  await prova('archivio su disco esterno spento: Arrivi sul PC aspetta il disco', async () => {
+    const j2 = new Jarvis(caricaConfig({ archivio: path.join(tmp, 'disco_archivio', 'JARVIS_Foto'), arrivi: path.join(tmp, 'pc', 'Arrivi'), effetti: false, voce: false }));
+    try {
+      scrivi(j2.cfg.arrivi, 'dal_telefono.jpg', jpeg({ data: '2026:03:03 08:00:00', seme: 3030 }));
+      j2.archivioDisponibile = () => false; // disco spento
+      await assert.rejects(() => j2.importaArrivi(), /spento o scollegato/);
+      const avvisi = [];
+      let chiesto = 0;
+      const s = new Sentinella(j2, { attesaArrivi: 0, avvisa: (m) => avvisi.push(m), chiedi: async () => { chiesto++; return true; } });
+      await s.controllaArrivi(); // primo conteggio
+      assert.equal((await s.controllaArrivi()).azione, 'attesa-disco');
+      await s.controllaArrivi();
+      assert.equal(avvisi.length, 1, 'avvisa una volta sola');
+      assert.equal(chiesto, 0);
+      delete j2.archivioDisponibile; // disco acceso
+      assert.equal((await s.controllaArrivi()).azione, 'importazione');
+      while (j2.lavoroInCorso) await new Promise((r) => setTimeout(r, 50));
+      assert.equal(j2.ultimoEsito.esito, 'ok', j2.ultimoEsito.errore);
+      assert.ok(fs.existsSync(path.join(j2.cfg.archivio, 'Foto/2026/03 Marzo/2026-03-03_08-00-00_iPhone15Pro.jpg')));
+      assert.deepEqual(fs.readdirSync(j2.cfg.arrivi), []);
+    } finally {
+      j2.regista.chiudi();
+    }
+  });
+
   await prova('stato e diagnostica', async () => {
     const s = await j.stato();
     assert.ok(s.totali.foto > 20 && s.totali.daScegliere === 1);
