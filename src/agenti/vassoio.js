@@ -56,8 +56,8 @@ export class Vassoio {
   }
 
   /** Fumetto accanto all'orologio. Restituisce false se l'icona non c'è (allora si usa la finestra). */
-  avviso(titolo, testo) {
-    return this.#invia({ avviso: { titolo, testo } });
+  avviso(titolo, testo, azione = 'galleria') {
+    return this.#invia({ avviso: { titolo, testo, azione } });
   }
 
   chiudi() {

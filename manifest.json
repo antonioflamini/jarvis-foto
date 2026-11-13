@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "jarvis-foto",
   "display_name": "JARVIS Foto",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Il tuo archivista personale: importa foto e video da cartelle, zip, schede e dalla cartella Arrivi, li ordina per data e luogo e fa il backup su disco esterno, con pannello olografico.",
   "long_description": "JARVIS Foto lavora interamente sul tuo computer: le foto non vengono mai caricate su internet.\n\n- **Importa** da cartelle, file zip (anche annidati), chiavette, schede SD e telefoni.\n- **Ordina** per data vera di scatto (EXIF, metadati video, nome del file) in Foto/Anno/Mese, con cartelle dedicate per le giornate piene di foto, più Video e Screenshot separati.\n- **Rinomina** in modo uniforme: 2026-11-10_14-35-02_iPhone15.jpg.\n- **Cartella Arrivi**: butta lì foto del telefono, zip, esportazioni di Google Foto: JARVIS le smista.\n- **Ti chiede** se importare quando inserisci una scheda SD o una chiavetta (e se aggiornare il backup quando colleghi il disco).\n- **Luoghi**: le giornate con tante foto prendono il nome del comune dal GPS (es. \"Ponza\"), senza internet.\n- **Foto quasi uguali** (copie WhatsApp, raffiche) messe in \"Da scegliere\", mai cancellate.\n- **Live Photo** dell'iPhone tenute insieme; date corrette anche per Google Takeout e video Android.\n- **Annulla** l'ultima importazione in un attimo.\n- **Scarta i doppioni** con impronta SHA-256, anche se hanno nomi diversi.\n- **Backup** zippato e incrementale su hard disk esterno, uno zip per mese, verificato.\n- **Pannello olografico** in stile JARVIS con le foto che volano nella linea del tempo, e voce italiana.\n\nDi base copia e non tocca gli originali.",
   "author": {

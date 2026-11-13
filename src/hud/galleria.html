@@ -76,6 +76,19 @@ h2.spec{color:var(--a);border-bottom-color:rgba(255,181,71,.35)}
   .griglia{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}
   #palco{padding:10px 8px}.freccia{width:40px;height:64px}
 }
+/* accadde oggi */
+.oggiBarra{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:6px 0 4px}
+.oggiBarra input{font-family:var(--fm);background:var(--pan);color:var(--c2);border:1px solid var(--cd);padding:7px 10px;color-scheme:dark}
+h2 .btn{margin-left:auto;font-size:10px;padding:6px 12px}
+/* regia del video ricordo */
+#regia{position:fixed;inset:0;z-index:20;background:rgba(0,3,7,.97);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:18px}
+#regia.aperto{display:flex}
+#tela{width:min(96vw,calc((100vh - 190px) * 16 / 9));aspect-ratio:16/9;background:#000;border:1px solid var(--cd);box-shadow:0 0 50px rgba(73,231,255,.18)}
+.comandi{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:center;max-width:1100px}
+.comandi input[type=text],.comandi select{font-family:var(--ft);font-size:15px;font-weight:600;background:var(--pan);color:var(--txt);border:1px solid var(--cd);padding:8px 10px;min-width:220px}
+.comandi label{color:var(--mut);font-size:13px;letter-spacing:.1em}
+#statoRegia{font-family:var(--fm);font-size:12px;color:var(--c2);min-height:18px;text-align:center}
+.btn.rec{border-color:#ff5468;color:#ffd0d6}
 </style>
 </head>
 <body>
@@ -100,7 +113,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const fmt = (n) => Number(n || 0).toLocaleString('it-IT');
 const min = (p) => '/api/galleria/min?p=' + encodeURIComponent(p);
 const foto = (p) => '/api/galleria/foto?p=' + encodeURIComponent(p);
-const NOMI = { Foto: 'FOTO', Video: 'VIDEO', Screenshot: 'SCREENSHOT', 'Da scegliere': 'DA SCEGLIERE' };
+const NOMI = { Foto: 'FOTO', Video: 'VIDEO', Screenshot: 'SCREENSHOT', 'Da scegliere': 'DA SCEGLIERE', Ricordi: 'RICORDI' };
+let OGGI = null;
 let I = null, sezione = 'Foto', albumAperto = null, elenco = [], pos = 0;
 
 async function api(url) {
@@ -130,6 +144,11 @@ function miniatura(v) {
 
 function disegnaSezioni() {
   $('#sezioni').innerHTML = '';
+  const o = document.createElement('button');
+  o.innerHTML = `★ ACCADDE OGGI<b>${fmt(OGGI?.totale || 0)}</b>`;
+  if (sezione === 'oggi') o.className = 'att';
+  o.onclick = () => { location.hash = 'oggi'; };
+  $('#sezioni').appendChild(o);
   for (const s of Object.keys(NOMI)) {
     if (!I.totali[s] && s !== 'Foto') continue;
     const b = document.createElement('button');
@@ -196,6 +215,11 @@ async function apriAlbum(chiave) {
   elenco = [];
   c.innerHTML = `<h1>${esc(parti.length >= 3 ? parti[2].replace(/^\d{2} /, '') + ' ' + parti[1] : parti.slice(1).join(' ') || parti[0])}</h1>` +
     `<div class="sotto">${fmt(d.gruppi.reduce((t, g) => t + g.voci.length, 0))} elementi · ${esc(chiave)}</div>`;
+  const titoloAlbum = c.querySelector('h1').textContent;
+  const bv = document.createElement('button');
+  bv.className = 'btn'; bv.textContent = '▶ CREA VIDEO RICORDO';
+  bv.onclick = () => apriRegia(elenco, titoloAlbum, '');
+  if (chiave.startsWith('Foto')) c.appendChild(bv);
   for (const gr of d.gruppi) {
     c.insertAdjacentHTML('beforeend', `<h2 class="${gr.speciale ? 'spec' : ''}">${gr.speciale ? '★ ' : ''}${esc(gr.titolo)} <small>${fmt(gr.voci.length)}</small></h2>`);
     const g = document.createElement('div');
@@ -251,7 +275,9 @@ addEventListener('keydown', (e) => {
 
 async function instrada() {
   const parti = decodeURIComponent(location.hash.slice(1)).split('/').filter(Boolean);
+  if (parti[0] === 'oggi') { sezione = 'oggi'; disegnaSezioni(); $('#anni').innerHTML = ''; return vistaOggi(parti[1]); }
   if (parti[0] && NOMI[parti[0]]) sezione = parti[0];
+  else if (sezione === 'oggi') sezione = 'Foto';
   disegnaSezioni();
   try {
     const chiave = parti.join('/');
@@ -264,6 +290,7 @@ async function instrada() {
 (async function avvio() {
   try {
     I = await api('/api/galleria');
+    OGGI = await api('/api/galleria/oggi').catch(() => null);
   } catch (e) {
     $('#contenuto').innerHTML = `<div class="messaggio"><b>${esc(e.message)}</b><br><br>Accendi il disco e ricarica la pagina.</div>`;
     return;
@@ -271,6 +298,259 @@ async function instrada() {
   addEventListener('hashchange', instrada);
   instrada();
 })();
+</script>
+
+<div id="regia">
+  <canvas id="tela" width="1280" height="720"></canvas>
+  <div id="statoRegia"></div>
+  <div class="comandi">
+    <label>TITOLO</label><input type="text" id="titoloRegia" maxlength="60">
+    <label>MUSICA</label>
+    <select id="musicaRegia">
+      <option value="jarvis">Atmosfera JARVIS (creata dal programma)</option>
+      <option value="file">Un mio file musicale…</option>
+      <option value="no">Nessuna</option>
+    </select>
+    <input type="file" id="fileMusica" accept="audio/*" hidden>
+  </div>
+  <div class="comandi">
+    <button class="btn" id="guardaRegia">▶ GUARDA</button>
+    <button class="btn rec" id="creaRegia">● CREA IL VIDEO</button>
+    <button class="btn" id="fermaRegia">■ FERMA</button>
+    <button class="btn" id="chiudiRegia">CHIUDI ✕</button>
+  </div>
+</div>
+
+<script>
+// ---------- Accadde oggi ----------
+async function vistaOggi(giorno) {
+  const c = $('#contenuto');
+  c.innerHTML = '<div class="messaggio">Cerco i ricordi…</div>';
+  const d = await api('/api/galleria/oggi' + (giorno ? '?d=' + encodeURIComponent(giorno) : ''));
+  if (!giorno) OGGI = d;
+  elenco = [];
+  c.innerHTML = `<h1>ACCADDE ${giorno ? 'IL' : 'OGGI'}</h1><div class="sotto">${esc(d.data)} · negli anni passati</div>` +
+    `<div class="oggiBarra"><label class="sotto" style="margin:0">Scegli un altro giorno:</label><input type="date" id="altroGiorno" value="${giorno || ''}"></div>`;
+  $('#altroGiorno').onchange = (e) => { location.hash = e.target.value ? 'oggi/' + e.target.value : 'oggi'; };
+  if (!d.totale) { c.insertAdjacentHTML('beforeend', '<div class="messaggio">Nessuna foto scattata in questo giorno negli anni passati.<br>Prova un altro giorno con il calendario qui sopra.</div>'); return; }
+  for (const g of d.gruppi) {
+    const h = document.createElement('h2');
+    h.innerHTML = `${esc(g.titolo)} <small>${fmt(g.voci.length)}</small>`;
+    const b = document.createElement('button');
+    b.className = 'btn'; b.textContent = '▶ VIDEO RICORDO';
+    b.onclick = () => apriRegia(g.voci, g.titolo.split(' · ').pop(), g.fa === 1 ? 'Un anno fa' : `${g.fa} anni fa`);
+    h.appendChild(b);
+    c.appendChild(h);
+    const gr = document.createElement('div');
+    gr.className = 'griglia';
+    for (const v of g.voci) { const i = elenco.push(v) - 1; const t = miniatura(v); t.onclick = () => apriVisore(i); gr.appendChild(t); }
+    c.appendChild(gr);
+  }
+}
+
+// ---------- Video ricordo: diapositive animate con musica, registrate dal browser ----------
+const RG = { foto: [], titolo: '', sotto: '', ac: null, fine: 0, t0: 0, rec: null, pezzi: [], fermo: true, audioFile: null, nodi: [] };
+const INTRO = 3.5, PER = 4.2, DISS = 1.1, OUTRO = 3.5;
+const tela = $('#tela'), cx = tela.getContext('2d');
+
+function scegliFoto(voci, max = 40) {
+  const f = voci.filter((v) => v.tipo === 'foto');
+  if (f.length <= max) return f;
+  const passo = f.length / max;
+  return Array.from({ length: max }, (_, i) => f[Math.floor(i * passo + passo / 2)]);
+}
+const statoRegia = (t) => { $('#statoRegia').textContent = t; };
+
+async function apriRegia(voci, titolo, sotto) {
+  const scelte = scegliFoto(voci);
+  if (!scelte.length) return alert('In questo gruppo non ci sono foto.');
+  $('#regia').classList.add('aperto');
+  $('#titoloRegia').value = titolo;
+  RG.sotto = sotto || '';
+  RG.foto = [];
+  cx.fillStyle = '#000'; cx.fillRect(0, 0, tela.width, tela.height);
+  await document.fonts.load('900 40px Orbitron').catch(() => {});
+  await document.fonts.load('600 20px Rajdhani').catch(() => {});
+  let fatte = 0;
+  for (const v of scelte) {
+    statoRegia(`Preparo le foto… ${++fatte} di ${scelte.length}`);
+    try {
+      const img = new Image();
+      img.src = foto(v.p);
+      await img.decode();
+      const k = Math.min(1, 1920 / Math.max(img.naturalWidth, img.naturalHeight));
+      const bmp = await createImageBitmap(img, { resizeWidth: Math.round(img.naturalWidth * k), resizeHeight: Math.round(img.naturalHeight * k), resizeQuality: 'high' });
+      const m = v.nome.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      const data = m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+      const s = RG.foto.length * 7919;
+      RG.foto.push({ bmp, data, z0: 1 + (s % 7) / 60, z1: 1.12 + (s % 5) / 50, dx: ((s % 11) / 11 - 0.5) * 0.12, dy: ((s % 13) / 13 - 0.5) * 0.10 });
+    } catch { /* foto non leggibile: la salto */ }
+  }
+  RG.fine = INTRO + RG.foto.length * PER + OUTRO;
+  statoRegia(`${RG.foto.length} foto · durata ${Math.round(RG.fine)} secondi. Premi GUARDA per vederlo, CREA IL VIDEO per salvarlo nella cartella Ricordi.`);
+  disegna(0.6);
+}
+
+function testoCentrato(t, y, font, colore, alfa, ombra) {
+  cx.save(); cx.globalAlpha = alfa; cx.font = font; cx.fillStyle = colore; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  if (ombra) { cx.shadowColor = ombra; cx.shadowBlur = 24; }
+  cx.fillText(t, tela.width / 2, y); cx.restore();
+}
+function cornice(alfa) {
+  const W = tela.width, H = tela.height, l = 46;
+  cx.save(); cx.globalAlpha = alfa * 0.8; cx.strokeStyle = '#49e7ff'; cx.lineWidth = 2; cx.shadowColor = '#49e7ff'; cx.shadowBlur = 8;
+  for (const [x, y, sx, sy] of [[22, 22, 1, 1], [W - 22, 22, -1, 1], [22, H - 22, 1, -1], [W - 22, H - 22, -1, -1]]) {
+    cx.beginPath(); cx.moveTo(x, y + sy * l); cx.lineTo(x, y); cx.lineTo(x + sx * l, y); cx.stroke();
+  }
+  cx.restore();
+}
+function disegnaFoto(f, avanzamento, alfa) {
+  const W = tela.width, H = tela.height, b = f.bmp;
+  const z = f.z0 + (f.z1 - f.z0) * avanzamento;
+  const s = Math.max(W / b.width, H / b.height) * z;
+  const w = b.width * s, h = b.height * s;
+  const x = (W - w) / 2 + f.dx * W * (avanzamento - 0.5), y = (H - h) / 2 + f.dy * H * (avanzamento - 0.5);
+  cx.save(); cx.globalAlpha = alfa; cx.drawImage(b, x, y, w, h); cx.restore();
+}
+function disegna(t) {
+  const W = tela.width, H = tela.height, titolo = $('#titoloRegia').value || 'Ricordo';
+  cx.fillStyle = '#01060c'; cx.fillRect(0, 0, W, H);
+  const n = RG.foto.length;
+  const fade = (a, b) => Math.max(0, Math.min(1, (t - a) / (b - a)));
+  if (t < INTRO + DISS) {
+    if (n) disegnaFoto(RG.foto[0], 0, 0.18 * (1 - fade(INTRO, INTRO + DISS)));
+    const a = Math.min(fade(0.2, 1.2), 1 - fade(INTRO - 0.4, INTRO + 0.4));
+    testoCentrato('J . A . R . V . I . S .', H / 2 - 90, '700 18px Orbitron', '#5d8fa0', a);
+    testoCentrato(titolo.toUpperCase(), H / 2 - 10, '900 54px Orbitron', '#ffffff', a, '#49e7ff');
+    if (RG.sotto) testoCentrato(RG.sotto, H / 2 + 56, '600 26px Rajdhani', '#9ff4ff', a);
+  }
+  for (let i = 0; i < n; i++) {
+    const inizio = INTRO + i * PER, fineI = inizio + PER + DISS;
+    if (t < inizio || t > fineI) continue;
+    const alfa = i === n - 1 ? Math.min(fade(inizio, inizio + DISS), 1 - fade(fineI - DISS * 0.2, fineI + 0.6)) : fade(inizio, inizio + DISS);
+    disegnaFoto(RG.foto[i], (t - inizio) / (PER + DISS), alfa);
+    const ac = Math.min(fade(inizio + 0.6, inizio + 1.4), 1 - fade(inizio + PER - 0.6, inizio + PER));
+    if (RG.foto[i].data && ac > 0) {
+      cx.save(); cx.globalAlpha = ac; cx.font = '600 24px Rajdhani'; cx.fillStyle = '#cdf6ff'; cx.shadowColor = '#000'; cx.shadowBlur = 10;
+      cx.fillText(RG.foto[i].data.toUpperCase(), 48, H - 46); cx.restore();
+    }
+  }
+  const fo = INTRO + n * PER;
+  if (t > fo) {
+    const a = Math.min(fade(fo + 0.3, fo + 1.2), 1 - fade(RG.fine - 0.8, RG.fine));
+    testoCentrato(titolo.toUpperCase(), H / 2 - 20, '900 34px Orbitron', '#ffffff', a, '#49e7ff');
+    testoCentrato('dall\'archivio di J.A.R.V.I.S.', H / 2 + 30, '600 22px Rajdhani', '#5d8fa0', a);
+  }
+  cornice(Math.min(1, t / 1.5) * (1 - fade(RG.fine - 0.8, RG.fine)));
+}
+
+// Musica "Atmosfera JARVIS": accordi morbidi e un arpeggio, creati al momento (nessun diritto d'autore)
+function musicaJarvis(ac, uscita, durata) {
+  const master = ac.createGain(); master.gain.setValueAtTime(0, ac.currentTime);
+  master.gain.linearRampToValueAtTime(0.22, ac.currentTime + 2.5);
+  master.gain.setValueAtTime(0.22, ac.currentTime + Math.max(3, durata - 3.5));
+  master.gain.linearRampToValueAtTime(0, ac.currentTime + durata);
+  const filtro = ac.createBiquadFilter(); filtro.type = 'lowpass'; filtro.frequency.value = 1800;
+  filtro.connect(master); master.connect(uscita);
+  const hz = (n) => 440 * 2 ** ((n - 69) / 12);
+  const accordi = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]]; // La-, Fa, Do, Sol
+  const battuta = 4.2;
+  const nota = (f, t0, dur, vol, tipo) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = tipo; o.frequency.value = f;
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol, t0 + Math.min(0.9, dur / 3));
+    g.gain.setValueAtTime(vol, t0 + dur * 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g).connect(filtro); o.start(t0); o.stop(t0 + dur + 0.05);
+    RG.nodi.push(o);
+  };
+  for (let k = 0, t = ac.currentTime; t < ac.currentTime + durata; k++, t += battuta) {
+    const a = accordi[k % accordi.length];
+    for (const n of a) { nota(hz(n - 12), t, battuta + 1, 0.05, 'triangle'); nota(hz(n - 12) * 1.003, t, battuta + 1, 0.03, 'sine'); }
+    nota(hz(a[0] - 24), t, battuta, 0.09, 'sine');
+    for (let s = 0; s < 8; s++) nota(hz(a[s % 3] + 12 + (s >= 6 ? 12 : 0)), t + s * (battuta / 8), 0.9, 0.025, 'sine');
+  }
+}
+
+function ferma() {
+  RG.fermo = true;
+  for (const o of RG.nodi) try { o.stop(); } catch { /* già fermo */ }
+  RG.nodi = [];
+  if (RG.audioFile) { RG.audioFile.pause(); }
+  if (RG.rec && RG.rec.state !== 'inactive') RG.rec.stop();
+}
+
+async function avvia(registra) {
+  if (!RG.foto.length) return;
+  RG.annullato = true; ferma(); RG.annullato = false;
+  RG.ac = RG.ac || new AudioContext();
+  await RG.ac.resume();
+  const ac = RG.ac;
+  const misc = ac.createGain(); misc.connect(ac.destination);
+  const destRec = ac.createMediaStreamDestination(); misc.connect(destRec);
+  const scelta = $('#musicaRegia').value;
+  if (scelta === 'jarvis') musicaJarvis(ac, misc, RG.fine);
+  if (scelta === 'file' && RG.audioFile) {
+    RG.audioFile.currentTime = 0; RG.audioFile.loop = true;
+    if (!RG.audioFile._sorgente) { RG.audioFile._sorgente = ac.createMediaElementSource(RG.audioFile); }
+    const g = ac.createGain(); RG.audioFile._sorgente.disconnect(); RG.audioFile._sorgente.connect(g); g.connect(misc);
+    g.gain.setValueAtTime(1, ac.currentTime + Math.max(0, RG.fine - 3)); g.gain.linearRampToValueAtTime(0, ac.currentTime + RG.fine);
+    RG.audioFile.play();
+  }
+  if (registra) {
+    const tipi = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    const tipo = tipi.find((x) => window.MediaRecorder && MediaRecorder.isTypeSupported(x));
+    if (!tipo) { statoRegia('Questo browser non sa registrare video: usa Microsoft Edge o Google Chrome.'); return; }
+    const flusso = new MediaStream([...tela.captureStream(30).getVideoTracks(), ...destRec.stream.getAudioTracks()]);
+    RG.pezzi = [];
+    RG.rec = new MediaRecorder(flusso, { mimeType: tipo, videoBitsPerSecond: 8000000 });
+    RG.rec.ondataavailable = (e) => { if (e.data.size) RG.pezzi.push(e.data); };
+    RG.rec.onstop = () => salvaVideo(tipo);
+    RG.rec.start(1000);
+  }
+  RG.fermo = false;
+  RG.t0 = performance.now();
+  const passo = () => {
+    if (RG.fermo) return;
+    const t = (performance.now() - RG.t0) / 1000;
+    disegna(t);
+    const resto = Math.max(0, Math.ceil(RG.fine - t));
+    statoRegia(registra ? `● Registrazione in corso… mancano ${resto} s. Tieni questa finestra in primo piano.` : `▶ ${resto} s`);
+    if (t >= RG.fine) { ferma(); if (!registra) statoRegia('Fine. Premi CREA IL VIDEO per salvarlo.'); return; }
+    requestAnimationFrame(passo);
+  };
+  requestAnimationFrame(passo);
+}
+
+async function salvaVideo(tipo) {
+  if (RG.annullato || !RG.pezzi.length) { RG.pezzi = []; return; }
+  const blob = new Blob(RG.pezzi, { type: tipo.split(';')[0] });
+  RG.pezzi = [];
+  statoRegia(`Salvo il video (${(blob.size / 1048576).toFixed(1).replace('.', ',')} MB)…`);
+  try {
+    const r = await fetch('/api/galleria/ricordo?nome=' + encodeURIComponent($('#titoloRegia').value || 'Ricordo'),
+      { method: 'POST', headers: { 'x-jarvis': '1', 'content-type': blob.type }, body: blob });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.errore || 'errore');
+    statoRegia(`✔ Salvato nell'archivio: ${d.rel}`);
+    fetch('/api/galleria/mostra?p=' + encodeURIComponent(d.rel), { method: 'POST', headers: { 'x-jarvis': '1' } });
+    I = await api('/api/galleria').catch(() => I);
+  } catch (e) {
+    statoRegia('Non riesco a salvarlo nell\'archivio (' + e.message + '): lo scarico nella cartella Download.');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = ($('#titoloRegia').value || 'Ricordo') + (blob.type.includes('mp4') ? '.mp4' : '.webm'); a.click();
+  }
+}
+
+$('#guardaRegia').onclick = () => avvia(false);
+$('#creaRegia').onclick = () => avvia(true);
+$('#fermaRegia').onclick = () => { RG.annullato = true; ferma(); statoRegia('Fermato: il video non è stato salvato.'); };
+$('#chiudiRegia').onclick = () => { RG.annullato = true; ferma(); RG.rec = null; $('#regia').classList.remove('aperto'); for (const f of RG.foto) f.bmp.close?.(); RG.foto = []; };
+$('#musicaRegia').onchange = (e) => { if (e.target.value === 'file') $('#fileMusica').click(); };
+$('#fileMusica').onchange = (e) => {
+  const f = e.target.files[0];
+  if (!f) { $('#musicaRegia').value = 'jarvis'; return; }
+  RG.audioFile = new Audio(URL.createObjectURL(f));
+  statoRegia('Musica scelta: ' + f.name);
+};
 </script>
 </body>
 </html>

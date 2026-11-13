@@ -42,7 +42,8 @@ Voce 'Menu completo (verifica, annulla, diagnostica...)' 'menu'
 Voce 'Chiudi JARVIS fino al prossimo avvio del PC' 'esci'
 $notifica.ContextMenuStrip = $menu
 $notifica.add_MouseDoubleClick({ Invia 'galleria' })
-$notifica.add_BalloonTipClicked({ Invia 'galleria' })
+$script:azioneFumetto = 'galleria'
+$notifica.add_BalloonTipClicked({ Invia $script:azioneFumetto })
 
 # Lettura dei messaggi di JARVIS senza bloccare l'icona
 $ingresso = New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding($false)))
@@ -72,6 +73,7 @@ $timer.add_Tick({
       if ($m.avviso) {
         $testo = [string]$m.avviso.testo
         if ($testo.Length -gt 250) { $testo = $testo.Substring(0, 247) + '...' }
+        if ($m.avviso.azione) { $script:azioneFumetto = [string]$m.avviso.azione } else { $script:azioneFumetto = 'galleria' }
         $notifica.BalloonTipTitle = [string]$m.avviso.titolo
         $notifica.BalloonTipText = $testo
         $notifica.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info

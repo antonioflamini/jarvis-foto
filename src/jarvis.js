@@ -16,7 +16,7 @@ import { contaMultimediali, sentinellaInEsecuzione, SOGLIA_SPAZIO_BASSO } from '
 import { leggiJSON, numero, byteLeggibili, saluto, nomeSicuro, cartellaMese, ora, esiste, inParallelo } from './util.js';
 import { tipoDi } from './agenti/esploratore.js';
 
-export const VERSIONE = '1.5.0';
+export const VERSIONE = '1.6.0';
 const MARGINE_SPAZIO = 1024 ** 3; // dopo un'importazione devono restare almeno 1 GB liberi
 
 export class Jarvis {

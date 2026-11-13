@@ -10,7 +10,8 @@ import jpegjs from 'jpeg-js';
 import { Jarvis } from '../src/jarvis.js';
 import { caricaConfig } from '../src/config.js';
 import { Sentinella } from '../src/agenti/sentinella.js';
-import { jpegIncorporati, anteprimaRaw } from '../src/agenti/galleria.js';
+import { jpegIncorporati, anteprimaRaw, conOrientamento } from '../src/agenti/galleria.js';
+import exifr from 'exifr';
 
 // ---------- Generatori di file finti ----------
 
@@ -405,6 +406,11 @@ try {
     assert.equal(trovati.length, 2);
     const a = await anteprimaRaw(file, 100);
     assert.ok(a && a.equals(grande));
+    // foto verticale: l'anteprima riceve l'orientamento e il lettore EXIF lo ritrova
+    const ruotata = conOrientamento(a, 6);
+    assert.equal(await exifr.orientation(ruotata), 6);
+    assert.equal(jpegIncorporati(ruotata).length, 1, 'resta un JPEG valido');
+    assert.equal(conOrientamento(a, 1), a);
   });
 
   await prova('galleria: anni, mesi, giornate e protezione dei percorsi', async () => {
@@ -422,6 +428,38 @@ try {
     assert.equal((await fetch(`${url}api/galleria/foto?p=${encodeURIComponent('../../segreto.txt')}`)).status, 404);
     assert.equal((await fetch(`${url}api/galleria/mostra?p=x`, { method: 'POST' })).status, 404, 'senza intestazione speciale non risponde');
     assert.match(await (await fetch(`${url}galleria`)).text(), /GALLERIA/);
+  });
+
+  await prova('accadde oggi: foto dello stesso giorno negli anni passati, avviso una volta al giorno', async () => {
+    j.galleria.invalida();
+    const r = await j.galleria.ricordi(new Date(2026, 7, 14, 10, 0));
+    assert.equal(r.gruppi[0].anno, 2025);
+    assert.equal(r.gruppi[0].fa, 1);
+    assert.ok(r.totale >= 14);
+    const avvisi = [];
+    const s = new Sentinella(j, { attesaPromemoria: 0, avvisa: (m, azione) => avvisi.push([m, azione]) });
+    const esito = await s.controllaRicordi(new Date(2026, 7, 14, 10, 0));
+    assert.ok(esito.totale >= 14);
+    assert.match(avvisi[0][0], /Accadde oggi/);
+    assert.equal(avvisi[0][1], 'galleria-oggi');
+    s.ultimoControlloRicordi = 0;
+    assert.equal(await s.controllaRicordi(new Date(2026, 7, 14, 11, 0)), null, 'non ripete nello stesso giorno');
+    assert.equal(await s.controllaRicordi(new Date(2026, 7, 15, 7, 0)), null, 'di notte non disturba');
+    fs.rmSync(path.join(archivio, '_JARVIS', 'ricordi_avvisati.txt'), { force: true });
+  });
+
+  await prova('video ricordo: salvato nella cartella Ricordi e visibile in galleria', async () => {
+    const url = await j.regista.avvia();
+    const finto = Buffer.from('finto video webm');
+    assert.equal((await fetch(`${url}api/galleria/ricordo?nome=x`, { method: 'POST', body: finto })).status, 404, 'senza intestazione speciale non salva');
+    const r = await (await fetch(`${url}api/galleria/ricordo?nome=${encodeURIComponent('Ferragosto: a Ponza!')}`,
+      { method: 'POST', headers: { 'x-jarvis': '1', 'content-type': 'video/webm' }, body: finto })).json();
+    assert.match(r.rel, /^Ricordi\/\d{4}-\d{2}-\d{2} Ferragosto a Ponza!\.webm$/);
+    assert.deepEqual(fs.readFileSync(path.join(archivio, r.rel)), finto);
+    const indice = await (await fetch(`${url}api/galleria`)).json();
+    assert.equal(indice.totali.Ricordi, 1);
+    fs.rmSync(path.join(archivio, 'Ricordi'), { recursive: true, force: true });
+    j.galleria.invalida();
   });
 
   await prova('stato e diagnostica', async () => {

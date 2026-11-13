@@ -20,6 +20,7 @@ function chiaveGruppo(rel) {
   if (p[0] === '_JARVIS') return ['registro', 'indice.json', 'ultima_importazione.json'].includes(p[1]) ? 'Registro' : null;
   if (p[0] === 'Arrivi' || p.length < 2) return null;
   if (p[0] === 'Da scegliere') return 'DaScegliere';
+  if (p[0] === 'Ricordi') return 'Ricordi';
   if (['Foto', 'Video'].includes(p[0]) && /^\d{4}$/.test(p[1]) && /^\d{2} /.test(p[2] || '')) return `${p[1]}-${p[2].slice(0, 2)}`;
   if (p[0] === 'Screenshot' && /^\d{4}$/.test(p[1])) return `${p[1]}-Screenshot`;
   return 'Altro';

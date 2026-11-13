@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process';
 import { tipoDi } from './esploratore.js';
 import { miniaturaEXIF } from './simili.js';
 import { fileURLToPath } from 'node:url';
+import exifr from 'exifr';
 
 const PAGINA = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'hud', 'galleria.html');
 
@@ -19,7 +20,9 @@ const MIME = {
   '.gif': 'image/gif', '.avif': 'image/avif', '.bmp': 'image/bmp',
   '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/mp4', '.webm': 'video/webm', '.mkv': 'video/x-matroska', '.3gp': 'video/3gpp',
 };
-const SEZIONI = ['Foto', 'Video', 'Screenshot', 'Da scegliere'];
+const SEZIONI = ['Foto', 'Video', 'Screenshot', 'Da scegliere', 'Ricordi'];
+const PIATTE = { 'Da scegliere': 'Foto quasi uguali da guardare', Ricordi: 'I tuoi video ricordo' }; // sezioni senza anni
+const MAX_RICORDO = 2 * 1024 ** 3;
 const GIORNO = /^(\d{4})-(\d{2})-(\d{2})/;
 
 /**
@@ -34,11 +37,12 @@ export function jpegIncorporati(buf) {
   while (i >= 0 && i < buf.length - 4) {
     let p = i + 2;
     let fine = -1;
-    while (p + 4 <= buf.length && buf[p] === 0xff) {
+    while (p + 2 <= buf.length && buf[p] === 0xff) {
       const m = buf[p + 1];
       if (m === 0xff) { p++; continue; }
       if (m === 0xd9) { fine = p + 2; break; }
       if ((m >= 0xd0 && m <= 0xd7) || m === 0x01) { p += 2; continue; }
+      if (p + 4 > buf.length) break;
       const lung = buf.readUInt16BE(p + 2);
       if (lung < 2) break;
       p += 2 + lung;
@@ -75,6 +79,26 @@ export async function anteprimaRaw(file, minimo = 20000, piccola = false) {
   return migliore && migliore.fine - migliore.inizio > minimo ? buf.subarray(migliore.inizio, migliore.fine) : null;
 }
 
+/**
+ * Le anteprime salvate dentro le foto (RAW e miniature EXIF) sono "dritte come esce il sensore":
+ * aggiungo un piccolo blocco EXIF con l'orientamento della foto originale, così il browser le ruota giuste.
+ */
+export function conOrientamento(jpg, orientamento) {
+  if (!jpg || !orientamento || orientamento === 1 || jpg[0] !== 0xff || jpg[1] !== 0xd8) return jpg;
+  const tiff = Buffer.alloc(26);
+  tiff.write('II', 0, 'latin1'); tiff.writeUInt16LE(42, 2); tiff.writeUInt32LE(8, 4); // intestazione TIFF
+  tiff.writeUInt16LE(1, 8); // una voce
+  tiff.writeUInt16LE(0x0112, 10); tiff.writeUInt16LE(3, 12); tiff.writeUInt32LE(1, 14); tiff.writeUInt16LE(orientamento, 18);
+  tiff.writeUInt32LE(0, 22); // nessun altro blocco
+  const corpo = Buffer.concat([Buffer.from('Exif\0\0', 'latin1'), tiff]);
+  const app1 = Buffer.alloc(4); app1[0] = 0xff; app1[1] = 0xe1; app1.writeUInt16BE(corpo.length + 2, 2);
+  return Buffer.concat([jpg.subarray(0, 2), app1, corpo, jpg.subarray(2)]);
+}
+
+async function orientamentoDi(file) {
+  try { return (await exifr.orientation(file)) || 1; } catch { return 1; }
+}
+
 function titoloGiorno(chiave) {
   const m = chiave.match(GIORNO);
   if (!m) return chiave;
@@ -92,7 +116,64 @@ export class Galleria {
 
   get archivio() { return this.jarvis.cfg.archivio; }
 
-  invalida() { this.cache = null; }
+  invalida() { this.cache = null; this.cacheTutti = null; }
+
+  /** Tutte le foto e i video della linea del tempo, con il giorno di scatto preso dal nome. */
+  async tutti() {
+    if (this.cacheTutti && Date.now() - this.cacheTutti.t < 600000) return this.cacheTutti.voci;
+    const voci = [];
+    for (const s of ['Foto', 'Video']) {
+      for (const f of await this.#fileIn(path.join(this.archivio, s))) {
+        const g = path.basename(f).match(GIORNO);
+        if (g) voci.push({ p: this.rel(f), nome: path.basename(f), tipo: tipoDi(f), giorno: g[0] });
+      }
+    }
+    this.cacheTutti = { t: Date.now(), voci };
+    return voci;
+  }
+
+  /**
+   * "Accadde oggi": foto e video scattati in questo giorno negli anni passati.
+   * @param {Date} [quando]
+   */
+  async ricordi(quando = new Date()) {
+    const mmgg = `${String(quando.getMonth() + 1).padStart(2, '0')}-${String(quando.getDate()).padStart(2, '0')}`;
+    const anno = quando.getFullYear();
+    const perAnno = new Map();
+    for (const v of await this.tutti()) {
+      const a = Number(v.giorno.slice(0, 4));
+      if (v.giorno.slice(5) !== mmgg || a >= anno) continue;
+      if (!perAnno.has(a)) perAnno.set(a, []);
+      perAnno.get(a).push(v);
+    }
+    const gruppi = [...perAnno.entries()].sort((x, y) => y[0] - x[0]).map(([a, voci]) => ({
+      anno: a, fa: anno - a, titolo: `${anno - a === 1 ? 'Un anno fa' : `${anno - a} anni fa`} · ${titoloGiorno(`${a}-${mmgg}`)}`, voci,
+    }));
+    return { giorno: mmgg, data: titoloGiorno(`${anno}-${mmgg}`), totale: gruppi.reduce((t, g) => t + g.voci.length, 0), gruppi };
+  }
+
+  /** Salva un video ricordo creato nel pannello (arriva dal browser) nella cartella Ricordi dell'archivio. */
+  async salvaRicordo(q, nome) {
+    const pulito = String(nome || 'Ricordo').replace(/[<>:"/\\|?*\x00-\x1f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 90) || 'Ricordo';
+    const ext = /mp4/i.test(q.headers['content-type'] || '') ? '.mp4' : '.webm';
+    const dir = path.join(this.archivio, 'Ricordi');
+    await fsp.mkdir(dir, { recursive: true });
+    const oggi = new Date();
+    const base = `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, '0')}-${String(oggi.getDate()).padStart(2, '0')} ${pulito}`;
+    let file = path.join(dir, base + ext);
+    for (let k = 2; fs.existsSync(file); k++) file = path.join(dir, `${base} (${k})${ext}`);
+    let byte = 0;
+    await new Promise((resolve, reject) => {
+      const out = fs.createWriteStream(file);
+      q.on('data', (c) => { byte += c.length; if (byte > MAX_RICORDO) { q.destroy(); out.destroy(); reject(new Error('video troppo grande')); } });
+      q.pipe(out);
+      out.on('finish', resolve);
+      out.on('error', reject);
+      q.on('error', reject);
+    }).catch(async (e) => { await fsp.rm(file, { force: true }); throw e; });
+    this.invalida();
+    return { file, rel: this.rel(file), byte };
+  }
 
   /** Percorso assoluto di un file dell'archivio, solo se sta davvero dentro l'archivio. */
   risolvi(rel) {
@@ -126,9 +207,9 @@ export class Galleria {
       const base = path.join(this.archivio, s);
       const anni = [];
       let tot = 0;
-      if (s === 'Da scegliere') {
+      if (PIATTE[s]) {
         const file = await this.#fileIn(base);
-        if (file.length) anni.push({ anno: '', album: [{ chiave: s, titolo: 'Foto quasi uguali da guardare', n: file.length, copertina: this.rel(file[0]) }] });
+        if (file.length) anni.push({ anno: '', album: [{ chiave: s, titolo: PIATTE[s], n: file.length, copertina: this.rel(file[0]) }] });
         tot = file.length;
       } else {
         const elenco = (await fsp.readdir(base, { withFileTypes: true }).catch(() => [])).filter((v) => v.isDirectory() && /^\d{4}$/.test(v.name));
@@ -184,9 +265,9 @@ export class Galleria {
   async #cacheAnteprima(abs, piccola = false) {
     const st = await fsp.stat(abs);
     const nome = crypto.createHash('sha1').update(`${abs}|${st.size}|${st.mtimeMs}`).digest('hex');
-    const file = path.join(this.archivio, '_JARVIS', 'anteprime', `${nome}${piccola ? '_min' : ''}.jpg`);
+    const file = path.join(this.archivio, '_JARVIS', 'anteprime', `${nome}${piccola ? '_min' : ''}_v2.jpg`);
     try { return await fsp.readFile(file); } catch { /* da creare */ }
-    const jpg = await anteprimaRaw(abs, 20000, piccola);
+    const jpg = conOrientamento(await anteprimaRaw(abs, 20000, piccola), await orientamentoDi(abs));
     if (jpg) {
       await fsp.mkdir(path.dirname(file), { recursive: true });
       await fsp.writeFile(file, jpg).catch(() => {});
@@ -208,6 +289,15 @@ export class Galleria {
       const azione = u.pathname.slice('/api/galleria'.length);
       if (azione === '' || azione === '/') { json(200, await this.indice()); return true; }
       if (azione === '/album') { json(200, await this.album(u.searchParams.get('c'))); return true; }
+      if (azione === '/oggi') {
+        const d = u.searchParams.get('d')?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        json(200, await this.ricordi(d ? new Date(Number(d[1]), Number(d[2]) - 1, Number(d[3])) : new Date()));
+        return true;
+      }
+      if (azione === '/ricordo' && q.method === 'POST' && q.headers['x-jarvis'] === '1') {
+        json(200, await this.salvaRicordo(q, u.searchParams.get('nome')));
+        return true;
+      }
       if (azione === '/mostra' && q.method === 'POST' && q.headers['x-jarvis'] === '1') {
         // l'intestazione speciale impedisce a un sito qualsiasi di usare questo comando
         const abs = this.risolvi(u.searchParams.get('p'));
@@ -221,7 +311,11 @@ export class Galleria {
       const ext = path.extname(abs).toLowerCase();
       if (azione === '/min') {
         const t = await miniaturaEXIF(abs);
-        if (t?.length) { r.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'max-age=86400' }); r.end(t); return true; }
+        if (t?.length) {
+          r.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'max-age=86400' });
+          r.end(conOrientamento(t, await orientamentoDi(abs)));
+          return true;
+        }
         if (RAW.has(ext)) {
           const jpg = await this.#cacheAnteprima(abs, true);
           if (jpg) { r.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'max-age=86400' }); r.end(jpg); return true; }
@@ -236,7 +330,7 @@ export class Galleria {
         }
         if (MIME[ext]) return this.#invia(abs, ext, q, r);
         const t = await miniaturaEXIF(abs); // HEIC e TIFF: il browser non li sa mostrare, uso la miniatura interna
-        if (t?.length) { r.writeHead(200, { 'content-type': 'image/jpeg' }); r.end(t); return true; }
+        if (t?.length) { r.writeHead(200, { 'content-type': 'image/jpeg' }); r.end(conOrientamento(t, await orientamentoDi(abs))); return true; }
         r.writeHead(415); r.end(); return true;
       }
       r.writeHead(404); r.end(); return true;

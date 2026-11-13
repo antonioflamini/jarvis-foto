@@ -138,6 +138,29 @@ export class Sentinella {
     return fatti;
   }
 
+  // "Accadde oggi": una volta al giorno (tra le 9 e le 21) ricorda le foto di questo giorno negli anni passati.
+  async controllaRicordi(adesso = new Date()) {
+    const j = this.jarvis;
+    if (j.lavoroInCorso || !j.archivioDisponibile() || !j.galleria) return null;
+    if (Date.now() - this.avviataIl < this.attesaPromemoria) return null; // non subito all'accensione del PC
+    if (adesso.getHours() < 9 || adesso.getHours() >= 21) return null;
+    if (adesso.getTime() - (this.ultimoControlloRicordi || 0) < 600000) return null;
+    this.ultimoControlloRicordi = adesso.getTime();
+    const oggi = `${adesso.getFullYear()}-${String(adesso.getMonth() + 1).padStart(2, '0')}-${String(adesso.getDate()).padStart(2, '0')}`;
+    const file = path.join(j.cfg.archivio, '_JARVIS', 'ricordi_avvisati.txt');
+    if ((await fsp.readFile(file, 'utf8').catch(() => '')).trim() === oggi) return null;
+    const r = await j.galleria.ricordi(adesso);
+    await fsp.mkdir(path.dirname(file), { recursive: true });
+    await fsp.writeFile(file, oggi);
+    if (!r.totale) return { totale: 0 };
+    const anni = r.gruppi.map((g) => g.anno);
+    const elencoAnni = anni.length > 1 ? `${anni.slice(0, -1).join(', ')} e ${anni.at(-1)}` : String(anni[0]);
+    this.avvisa(`Accadde oggi: ${numero(r.totale)} foto e video del ${adesso.getDate()} ${adesso.toLocaleDateString('it-IT', { month: 'long' })} ` +
+      `(${elencoAnni}). Clicca qui per rivederli.`, 'galleria-oggi');
+    j.regista.parla(`${j.cfg.nome ? `${j.cfg.nome}, oggi` : 'Oggi'} ci sono dei ricordi da rivedere.`);
+    return { totale: r.totale, anni };
+  }
+
   // Una sola sentinella per volta sul PC (evita domande doppie se è aperto anche Claude Desktop).
   #prendiBlocco() {
     if (!this.fileBlocco) return true;
@@ -208,6 +231,7 @@ export class Sentinella {
       }
       await this.controllaArrivi();
       await this.controllaPromemoria().catch(() => {});
+      await this.controllaRicordi().catch(() => {});
     } finally {
       this.occupata = false;
     }

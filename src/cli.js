@@ -66,6 +66,7 @@ function avviaVassoio() {
     registra(`Icona: ${comando}`);
     switch (comando) {
       case 'galleria': return jarvis.regista.apriUrl(`${url}galleria`);
+      case 'galleria-oggi': return jarvis.regista.apriUrl(`${url}galleria#oggi`);
       case 'pannello': return jarvis.regista.apriUrl(url);
       case 'arrivi-cartella': fs.mkdirSync(cfg.arrivi, { recursive: true }); return apri(cfg.arrivi);
       case 'archivio-cartella':
@@ -206,7 +207,7 @@ try {
       // Modalità autonoma: parte con Windows (nascosta) e resta in ascolto.
       let vassoio = null;
       // con l'icona accanto all'orologio i promemoria diventano fumetti (senza finestre da chiudere)
-      const s = new Sentinella(jarvis, { avvisa: (m) => { if (!vassoio?.avviso('J.A.R.V.I.S. Foto', m)) avvisaWindows(m); } });
+      const s = new Sentinella(jarvis, { avvisa: (m, azione) => { if (!vassoio?.avviso('J.A.R.V.I.S. Foto', m, azione)) avvisaWindows(m); } });
       const esito = await s.avvia();
       if (esito === 'gia-attiva') { console.log('  La sentinella è già attiva in background.'); break; }
       if (esito !== true) throw new Error('La sorveglianza dei supporti funziona solo su Windows.');
