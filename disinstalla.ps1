@@ -19,7 +19,7 @@ Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyCon
 Start-Sleep -Milliseconds 500
 
 $desktop = [Environment]::GetFolderPath('Desktop')
-foreach ($f in @('JARVIS Foto.lnk', 'JARVIS Arrivi.lnk', 'JARVIS Pannello.url')) {
+foreach ($f in @('JARVIS Foto.lnk', 'JARVIS Arrivi.lnk', 'JARVIS Pannello.url', 'JARVIS Galleria.url')) {
   Remove-Item -Path (Join-Path $desktop $f) -Force -ErrorAction SilentlyContinue
 }
 Remove-Item -Path (Join-Path ([Environment]::GetFolderPath('Programs')) 'JARVIS Foto') -Recurse -Force -ErrorAction SilentlyContinue

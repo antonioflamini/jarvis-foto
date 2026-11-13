@@ -14,6 +14,9 @@ import path from 'node:path';
 import { numero, byteLeggibili } from './util.js';
 import { RADICE_PROGETTO } from './config.js';
 import { eseguiPowerShell } from './agenti/esploratore.js';
+import { Vassoio } from './agenti/vassoio.js';
+import { avvisaWindows, contaMultimediali } from './agenti/sentinella.js';
+import { spawn } from 'node:child_process';
 
 // Registro su file (jarvis.log nella cartella del programma), utile quando gira nascosto.
 const FILE_LOG = path.join(RADICE_PROGETTO, 'jarvis.log');
@@ -53,6 +56,76 @@ async function aggiornaAvvioAutomatico() {
     `$l.WorkingDirectory = ${q(RADICE_PROGETTO)}; $l.WindowStyle = 7; $l.Save(); 'convertito' } }`;
   const out = await eseguiPowerShell(script);
   if (out && out.includes('convertito')) registra('Avvio automatico aggiornato: ora parte senza VBScript');
+}
+
+// Icona accanto all'orologio: menu con le azioni e stato sempre visibile.
+function avviaVassoio() {
+  const apri = (cosa) => spawnStacca('explorer.exe', [cosa]);
+  const v = new Vassoio(async (comando) => {
+    const url = await jarvis.regista.avvia();
+    registra(`Icona: ${comando}`);
+    switch (comando) {
+      case 'galleria': return jarvis.regista.apriUrl(`${url}galleria`);
+      case 'pannello': return jarvis.regista.apriUrl(url);
+      case 'arrivi-cartella': fs.mkdirSync(cfg.arrivi, { recursive: true }); return apri(cfg.arrivi);
+      case 'archivio-cartella':
+        if (!jarvis.archivioDisponibile()) return v.avviso('Disco spento', `Il disco dell'archivio (${jarvis.discoArchivio}) è spento: accendilo e riprova.`);
+        return apri(cfg.archivio);
+      case 'arrivi-sistema': {
+        const r = await jarvis.importaArrivi().catch((e) => ({ esito: 'errore', errore: e.message }));
+        if (r.esito === 'vuoto') v.avviso('Cartella Arrivi vuota', 'Copia foto, cartelle o zip nella cartella Arrivi e riprova.');
+        if (r.esito === 'errore') v.avviso('Non posso sistemare gli Arrivi', r.errore);
+        return null;
+      }
+      case 'backup':
+        if (!cfg.backup) return v.avviso('Backup non impostato', 'Collega il disco del backup, poi apri JARVIS Foto (menu completo) e scegli 3.');
+        return jarvis.backup().then((r) => { if (r.esito === 'errore') v.avviso('Backup non riuscito', r.errore); });
+      case 'menu':
+        try {
+          spawn('cmd.exe', ['/c', `start "" "${path.join(RADICE_PROGETTO, 'JARVIS.bat')}"`],
+            { detached: true, stdio: 'ignore', windowsVerbatimArguments: true }).on('error', () => {}).unref();
+        } catch { /* niente */ }
+        return null;
+      case 'esci':
+        registra('Sentinella chiusa dall\'icona');
+        v.chiudi();
+        setTimeout(() => process.exit(0), 500);
+        return null;
+      default: return null;
+    }
+  });
+  if (!v.avvia()) return null;
+  const aggiorna = async () => {
+    let t;
+    if (jarvis.lavoroInCorso) {
+      const p = jarvis.progresso;
+      const perc = p?.t === 'file' && p.n ? ` ${Math.round((p.i / p.n) * 100)}%` : '';
+      t = `JARVIS · ${jarvis.lavoroInCorso.modo === 'backup' ? 'backup in corso' : 'sto lavorando'}${perc}`;
+    } else if (!jarvis.archivioDisponibile()) {
+      t = `JARVIS · disco ${jarvis.discoArchivio} spento`;
+    } else {
+      const n = await contaMultimediali(cfg.arrivi, 10000, 8, true).catch(() => 0);
+      const b = await jarvis.promemoriaBackup().catch(() => null);
+      const backup = !b ? '' : b.giorni === null ? ' · backup: mai' : ` · backup: ${b.giorni === 0 ? 'oggi' : `${b.giorni} gg fa`}`;
+      t = `JARVIS · pronto${n ? ` · ${n} in Arrivi` : ''}${backup}`;
+    }
+    v.stato(t);
+  };
+  aggiorna();
+  setInterval(() => aggiorna().catch(() => {}), 15000).unref();
+  jarvis.regista.on('evento', (e) => {
+    if (e.t === 'inizio') aggiorna().catch(() => {});
+    if (e.t !== 'fine') return;
+    setTimeout(() => aggiorna().catch(() => {}), 2000);
+    if (e.modo === 'importa' && e.esito === 'ok') v.avviso('Importazione completata', `${numero(e.archiviati)} file archiviati${e.doppioni ? `, ${numero(e.doppioni)} doppioni scartati` : ''}. Clicca qui per vederli nella galleria.`);
+    if (e.modo === 'backup' && e.esito === 'ok') v.avviso('Backup completato', 'Backup aggiornato e verificato. Puoi spegnere il disco.');
+  });
+  return v;
+}
+
+function spawnStacca(cmd, args) {
+  try { spawn(cmd, args, { detached: true, stdio: 'ignore' }).on('error', () => {}).unref(); } catch { /* niente */ }
+  return null;
 }
 
 const flag = (f) => resto.includes(f);
@@ -131,13 +204,16 @@ try {
       break;
     case 'sorveglia': {
       // Modalità autonoma: parte con Windows (nascosta) e resta in ascolto.
-      const s = new Sentinella(jarvis);
+      let vassoio = null;
+      // con l'icona accanto all'orologio i promemoria diventano fumetti (senza finestre da chiudere)
+      const s = new Sentinella(jarvis, { avvisa: (m) => { if (!vassoio?.avviso('J.A.R.V.I.S. Foto', m)) avvisaWindows(m); } });
       const esito = await s.avvia();
       if (esito === 'gia-attiva') { console.log('  La sentinella è già attiva in background.'); break; }
       if (esito !== true) throw new Error('La sorveglianza dei supporti funziona solo su Windows.');
       registroSuFile();
       registra(`Sentinella avviata · archivio ${cfg.archivio}`);
       aggiornaAvvioAutomatico().catch(() => {});
+      vassoio = avviaVassoio(s);
       console.log(`  ${C.g}● In ascolto.${C.x} Inserisci una scheda o una chiavetta, o copia file in Arrivi: ti chiederò cosa fare. (Ctrl+C per uscire)`);
       await jarvis.regista.avvia();
       jarvis.regista.server?.ref();
@@ -154,16 +230,20 @@ try {
     case 'stato':
       console.log(JSON.stringify(await jarvis.stato(), null, 2));
       break;
-    case 'pannello': {
+    case 'pannello':
+    case 'galleria': {
+      const pagina = comando === 'galleria' ? 'galleria' : '';
       // Se la sentinella è già attiva in background, apro il suo pannello invece di avviarne un altro.
       const attivo = await fetch(`http://127.0.0.1:${cfg.porta}/`, { signal: AbortSignal.timeout(1500) })
         .then((r) => r.text()).then((t) => t.includes('J.A.R.V.I.S.')).catch(() => false);
       if (attivo) {
-        await jarvis.regista.apriUrl(`http://127.0.0.1:${cfg.porta}/`);
-        console.log('  Pannello della sentinella aperto nel browser.');
+        await jarvis.regista.apriUrl(`http://127.0.0.1:${cfg.porta}/${pagina}`);
+        console.log(`  ${pagina ? 'Galleria' : 'Pannello'} aperto nel browser.`);
         break;
       }
-      console.log(`  Pannello: ${await jarvis.regista.apri(true)}  (Ctrl+C per chiudere)`);
+      const url = await jarvis.regista.avvia();
+      await jarvis.regista.apriUrl(url + pagina);
+      console.log(`  ${url}${pagina}  (lascia aperta questa finestra mentre guardi; Ctrl+C per chiudere)`);
       await jarvis.stato();
       jarvis.regista.server?.ref();
       await new Promise(() => {});

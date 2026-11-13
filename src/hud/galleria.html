@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>J.A.R.V.I.S. · Galleria</title>
+<style>
+@font-face{font-family:'Orbitron';font-weight:700;font-display:swap;src:url(/font/orbitron-latin-700-normal.woff2) format('woff2')}
+@font-face{font-family:'Orbitron';font-weight:900;font-display:swap;src:url(/font/orbitron-latin-900-normal.woff2) format('woff2')}
+@font-face{font-family:'Rajdhani';font-weight:500;font-display:swap;src:url(/font/rajdhani-latin-500-normal.woff2) format('woff2')}
+@font-face{font-family:'Rajdhani';font-weight:600;font-display:swap;src:url(/font/rajdhani-latin-600-normal.woff2) format('woff2')}
+@font-face{font-family:'Rajdhani';font-weight:700;font-display:swap;src:url(/font/rajdhani-latin-700-normal.woff2) format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-weight:400;font-display:swap;src:url(/font/jetbrains-mono-latin-400-normal.woff2) format('woff2')}
+:root{
+  --bg:#01060c; --pan:#04111b; --c:#49e7ff; --c2:#9ff4ff; --cd:rgba(73,231,255,.22); --cf:rgba(73,231,255,.07);
+  --a:#ffb547; --txt:#cdf6ff; --mut:#5d8fa0;
+  --fh:'Orbitron',system-ui,sans-serif; --ft:'Rajdhani','Segoe UI',system-ui,sans-serif; --fm:'JetBrains Mono',Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:var(--ft);font-size:16px}
+body{display:grid;grid-template-rows:auto 1fr;grid-template-columns:260px 1fr;height:100vh;overflow:hidden;
+  background:radial-gradient(ellipse at 70% -10%,rgba(73,231,255,.10),transparent 55%),var(--bg)}
+header{grid-column:1/-1;display:flex;align-items:center;gap:22px;padding:14px 22px;border-bottom:1px solid var(--cd);flex-wrap:wrap}
+.logo{font-family:var(--fh);font-weight:900;letter-spacing:.38em;font-size:19px;color:var(--c2);text-shadow:0 0 16px var(--c);white-space:nowrap}
+.logo small{display:block;font-family:var(--ft);font-weight:600;font-size:11px;letter-spacing:.5em;color:var(--mut)}
+nav{display:flex;gap:8px;flex-wrap:wrap}
+nav button,.btn{font-family:var(--fh);font-size:11px;letter-spacing:.2em;padding:9px 14px;border:1px solid var(--cd);background:var(--cf);color:var(--c2);cursor:pointer;
+  clip-path:polygon(8px 0,100% 0,calc(100% - 8px) 100%,0 100%);text-decoration:none;white-space:nowrap}
+nav button:hover,.btn:hover{border-color:var(--c);color:#fff}
+nav button.att{border-color:var(--c);background:rgba(73,231,255,.18);color:#fff;text-shadow:0 0 8px var(--c)}
+nav button b{font-family:var(--fm);font-weight:400;color:var(--c);margin-left:6px}
+.spazio{flex:1}
+aside{border-right:1px solid var(--cd);overflow-y:auto;padding:12px 10px 40px}
+.anno{font-family:var(--fh);font-weight:700;font-size:15px;letter-spacing:.2em;color:var(--c2);padding:12px 10px 6px;display:flex;justify-content:space-between;cursor:pointer}
+.anno small{font-family:var(--fm);font-size:11px;color:var(--mut);letter-spacing:0}
+.mese{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;margin:2px 0;cursor:pointer;border-left:2px solid transparent;color:var(--txt);font-weight:600}
+.mese:hover{background:var(--cf)}
+.mese.att{border-left-color:var(--c);background:rgba(73,231,255,.12);color:#fff}
+.mese small{font-family:var(--fm);font-size:11px;color:var(--mut)}
+main{overflow-y:auto;padding:22px 26px 60px}
+h1{font-family:var(--fh);font-weight:900;font-size:24px;letter-spacing:.18em;color:#fff;text-shadow:0 0 18px rgba(73,231,255,.6)}
+.sotto{color:var(--mut);margin:4px 0 18px;font-family:var(--fm);font-size:12px}
+h2{font-weight:700;font-size:17px;letter-spacing:.06em;color:var(--c2);margin:26px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--cd);display:flex;gap:10px;align-items:baseline}
+h2 small{font-family:var(--fm);font-weight:400;font-size:11px;color:var(--mut)}
+h2.spec{color:var(--a);border-bottom-color:rgba(255,181,71,.35)}
+.griglia{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.t{position:relative;aspect-ratio:4/3;background:var(--pan);border:1px solid rgba(73,231,255,.12);overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.t img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .25s,filter .25s;filter:saturate(.95)}
+.t:hover{border-color:var(--c)} .t:hover img{transform:scale(1.05);filter:saturate(1.15)}
+.t .ico{font-family:var(--fh);font-size:11px;color:var(--mut);letter-spacing:.2em;text-align:center;padding:6px}
+.t .bad{position:absolute;right:6px;bottom:6px;font-family:var(--fm);font-size:10px;padding:2px 6px;background:rgba(1,6,12,.8);border:1px solid var(--cd);color:var(--c2)}
+.t .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:34px;color:#fff;text-shadow:0 0 12px #000;pointer-events:none}
+.copertine{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;margin-top:8px}
+.cop{cursor:pointer;background:var(--pan);border:1px solid var(--cd)}
+.cop:hover{border-color:var(--c);box-shadow:0 0 18px rgba(73,231,255,.25)}
+.cop .t{border:0;cursor:inherit}
+.cop div.n{padding:10px 12px;display:flex;justify-content:space-between;font-weight:700;letter-spacing:.05em}
+.cop div.n small{font-family:var(--fm);font-weight:400;color:var(--mut)}
+.messaggio{margin:60px auto;max-width:520px;text-align:center;color:var(--mut);font-size:18px;line-height:1.5}
+.messaggio b{color:var(--a)}
+/* visore */
+#visore{position:fixed;inset:0;z-index:10;background:rgba(0,3,7,.96);display:none;grid-template-rows:1fr auto}
+#visore.aperto{display:grid}
+#palco{position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:20px 70px}
+#palco img,#palco video{max-width:100%;max-height:100%;object-fit:contain;box-shadow:0 0 40px rgba(73,231,255,.15)}
+.freccia{position:absolute;top:50%;transform:translateY(-50%);width:52px;height:90px;border:1px solid var(--cd);background:var(--cf);color:var(--c2);font-size:26px;cursor:pointer}
+.freccia:hover{border-color:var(--c);color:#fff} #prec{left:10px} #succ{right:10px}
+#barraV{display:flex;gap:14px;align-items:center;padding:12px 20px;border-top:1px solid var(--cd);flex-wrap:wrap}
+#infoV{flex:1;font-family:var(--fm);font-size:12px;color:var(--c2);min-width:200px}
+#infoV small{display:block;color:var(--mut)}
+#chiudi{position:absolute;top:14px;right:16px;z-index:2}
+@media (max-width:760px){
+  body{grid-template-columns:1fr;grid-template-rows:auto auto 1fr}
+  aside{border-right:0;border-bottom:1px solid var(--cd);max-height:30vh}
+  main{padding:16px}
+  .griglia{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}
+  #palco{padding:10px 8px}.freccia{width:40px;height:64px}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">J.A.R.V.I.S.<small>GALLERIA</small></div>
+  <nav id="sezioni"></nav>
+  <div class="spazio"></div>
+  <a class="btn" href="/" title="Pannello del lavoro in corso">PANNELLO</a>
+</header>
+<aside id="anni"></aside>
+<main id="contenuto"><div class="messaggio">Carico l'archivio…</div></main>
+
+<div id="visore">
+  <button class="btn" id="chiudi">CHIUDI ✕</button>
+  <div id="palco"><button class="freccia" id="prec" title="Precedente (←)">‹</button><div id="media"></div><button class="freccia" id="succ" title="Successiva (→)">›</button></div>
+  <div id="barraV"><div id="infoV"></div><button class="btn" id="mostra">MOSTRA NELLA CARTELLA</button><a class="btn" id="originale" target="_blank">APRI ORIGINALE</a></div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = (n) => Number(n || 0).toLocaleString('it-IT');
+const min = (p) => '/api/galleria/min?p=' + encodeURIComponent(p);
+const foto = (p) => '/api/galleria/foto?p=' + encodeURIComponent(p);
+const NOMI = { Foto: 'FOTO', Video: 'VIDEO', Screenshot: 'SCREENSHOT', 'Da scegliere': 'DA SCEGLIERE' };
+let I = null, sezione = 'Foto', albumAperto = null, elenco = [], pos = 0;
+
+async function api(url) {
+  const r = await fetch(url);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.errore || 'errore ' + r.status);
+  return d;
+}
+
+function miniatura(v) {
+  const el = document.createElement('div');
+  el.className = 't';
+  if (v.tipo === 'video') {
+    el.innerHTML = '<div class="ico">VIDEO</div><div class="play">▶</div>';
+  } else {
+    const img = new Image();
+    img.loading = 'lazy'; img.decoding = 'async'; img.alt = v.nome;
+    img.onerror = () => { img.remove(); el.insertAdjacentHTML('afterbegin', '<div class="ico">ANTEPRIMA NON DISPONIBILE</div>'); };
+    img.onload = () => { if (!img.naturalWidth) img.onerror(); };
+    img.src = min(v.p);
+    el.appendChild(img);
+  }
+  const ext = v.nome.split('.').pop().toUpperCase();
+  if (!['JPG', 'JPEG', 'PNG', 'WEBP', 'GIF', 'MP4'].includes(ext)) el.insertAdjacentHTML('beforeend', `<span class="bad">${esc(ext)}</span>`);
+  return el;
+}
+
+function disegnaSezioni() {
+  $('#sezioni').innerHTML = '';
+  for (const s of Object.keys(NOMI)) {
+    if (!I.totali[s] && s !== 'Foto') continue;
+    const b = document.createElement('button');
+    b.innerHTML = `${NOMI[s]}<b>${fmt(I.totali[s])}</b>`;
+    if (s === sezione) b.className = 'att';
+    b.onclick = () => { location.hash = encodeURIComponent(s); };
+    $('#sezioni').appendChild(b);
+  }
+}
+
+function disegnaAnni() {
+  const box = $('#anni');
+  box.innerHTML = '';
+  for (const a of I.sezioni[sezione] || []) {
+    if (a.anno) {
+      const t = document.createElement('div');
+      t.className = 'anno';
+      t.innerHTML = `${esc(a.anno)}<small>${fmt(a.n)}</small>`;
+      t.onclick = () => { location.hash = encodeURIComponent(sezione) + '/' + encodeURIComponent(a.anno); };
+      box.appendChild(t);
+    }
+    for (const al of a.album) {
+      const m = document.createElement('div');
+      m.className = 'mese' + (al.chiave === albumAperto ? ' att' : '');
+      m.innerHTML = `${esc(al.titolo)}<small>${fmt(al.n)}</small>`;
+      m.onclick = () => { location.hash = encodeURIComponent(al.chiave); };
+      box.appendChild(m);
+    }
+  }
+}
+
+// Vista d'insieme: le copertine dei mesi (di una sezione o di un anno)
+function copertine(anno) {
+  albumAperto = null;
+  disegnaAnni();
+  const anni = (I.sezioni[sezione] || []).filter((a) => !anno || a.anno === anno);
+  const c = $('#contenuto');
+  if (!anni.length) { c.innerHTML = `<div class="messaggio">Nessun elemento in <b>${esc(sezione)}</b>.</div>`; return; }
+  const tot = anni.reduce((t, a) => t + (a.n || a.album.reduce((x, y) => x + y.n, 0)), 0);
+  c.innerHTML = `<h1>${esc(anno || NOMI[sezione])}</h1><div class="sotto">${fmt(tot)} elementi · ${esc(I.archivio)}</div>`;
+  for (const a of anni) {
+    if (!anno && a.anno) c.insertAdjacentHTML('beforeend', `<h2>${esc(a.anno)} <small>${fmt(a.n)}</small></h2>`);
+    const g = document.createElement('div');
+    g.className = 'copertine';
+    for (const al of a.album) {
+      const cop = document.createElement('div');
+      cop.className = 'cop';
+      cop.appendChild(miniatura({ p: al.copertina, nome: al.copertina, tipo: /\.(mp4|mov|m4v|avi|mkv|3gp|mts|wmv|webm)$/i.test(al.copertina) ? 'video' : 'foto' }));
+      cop.insertAdjacentHTML('beforeend', `<div class="n">${esc(al.titolo)}${a.anno ? ' ' + esc(a.anno) : ''}<small>${fmt(al.n)}</small></div>`);
+      cop.onclick = () => { location.hash = encodeURIComponent(al.chiave); };
+      g.appendChild(cop);
+    }
+    c.appendChild(g);
+  }
+}
+
+async function apriAlbum(chiave) {
+  albumAperto = chiave;
+  disegnaAnni();
+  const c = $('#contenuto');
+  c.innerHTML = '<div class="messaggio">Carico…</div>';
+  const d = await api('/api/galleria/album?c=' + encodeURIComponent(chiave));
+  const parti = chiave.split('/');
+  elenco = [];
+  c.innerHTML = `<h1>${esc(parti.length >= 3 ? parti[2].replace(/^\d{2} /, '') + ' ' + parti[1] : parti.slice(1).join(' ') || parti[0])}</h1>` +
+    `<div class="sotto">${fmt(d.gruppi.reduce((t, g) => t + g.voci.length, 0))} elementi · ${esc(chiave)}</div>`;
+  for (const gr of d.gruppi) {
+    c.insertAdjacentHTML('beforeend', `<h2 class="${gr.speciale ? 'spec' : ''}">${gr.speciale ? '★ ' : ''}${esc(gr.titolo)} <small>${fmt(gr.voci.length)}</small></h2>`);
+    const g = document.createElement('div');
+    g.className = 'griglia';
+    for (const v of gr.voci) {
+      const i = elenco.push(v) - 1;
+      const t = miniatura(v);
+      t.onclick = () => apriVisore(i);
+      g.appendChild(t);
+    }
+    c.appendChild(g);
+  }
+  c.scrollTop = 0;
+}
+
+function apriVisore(i) {
+  pos = (i + elenco.length) % elenco.length;
+  const v = elenco[pos];
+  const m = $('#media');
+  m.innerHTML = '';
+  if (v.tipo === 'video') {
+    const vid = document.createElement('video');
+    vid.controls = true; vid.autoplay = true; vid.src = foto(v.p);
+    vid.onerror = () => { m.innerHTML = '<div class="messaggio">Il browser non riesce a riprodurre questo video.<br>Usa <b>APRI ORIGINALE</b> o <b>MOSTRA NELLA CARTELLA</b>.</div>'; };
+    m.appendChild(vid);
+  } else {
+    const img = new Image();
+    img.src = foto(v.p);
+    img.onerror = () => { m.innerHTML = '<div class="messaggio">Anteprima non disponibile per questo formato.<br>Usa <b>MOSTRA NELLA CARTELLA</b>.</div>'; };
+    m.appendChild(img);
+  }
+  const d = v.nome.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})_?([^.]*)/);
+  $('#infoV').innerHTML = (d ? `${d[3]}/${d[2]}/${d[1]} · ${d[4]}:${d[5]}${d[7] ? ' · ' + esc(d[7].replace(/_\d+$/, '')) : ''}` : esc(v.nome)) +
+    `<small>${esc(v.p)} · ${pos + 1} di ${elenco.length}</small>`;
+  $('#originale').href = foto(v.p);
+  $('#visore').classList.add('aperto');
+  // precarico la successiva
+  const s = elenco[(pos + 1) % elenco.length];
+  if (s && s.tipo !== 'video') new Image().src = foto(s.p);
+}
+function chiudiVisore() { $('#visore').classList.remove('aperto'); $('#media').innerHTML = ''; }
+$('#chiudi').onclick = chiudiVisore;
+$('#prec').onclick = () => apriVisore(pos - 1);
+$('#succ').onclick = () => apriVisore(pos + 1);
+$('#mostra').onclick = () => fetch('/api/galleria/mostra?p=' + encodeURIComponent(elenco[pos].p), { method: 'POST', headers: { 'x-jarvis': '1' } });
+$('#palco').addEventListener('click', (e) => { if (e.target.id === 'palco') chiudiVisore(); });
+addEventListener('keydown', (e) => {
+  if (!$('#visore').classList.contains('aperto')) return;
+  if (e.key === 'Escape') chiudiVisore();
+  if (e.key === 'ArrowLeft') apriVisore(pos - 1);
+  if (e.key === 'ArrowRight') apriVisore(pos + 1);
+});
+
+async function instrada() {
+  const parti = decodeURIComponent(location.hash.slice(1)).split('/').filter(Boolean);
+  if (parti[0] && NOMI[parti[0]]) sezione = parti[0];
+  disegnaSezioni();
+  try {
+    const chiave = parti.join('/');
+    const esiste = Object.values(I.sezioni).some((anni) => anni.some((a) => a.album.some((al) => al.chiave === chiave)));
+    if (esiste) return await apriAlbum(chiave);
+    copertine(parti[1]);
+  } catch (e) { $('#contenuto').innerHTML = `<div class="messaggio">${esc(e.message)}</div>`; }
+}
+
+(async function avvio() {
+  try {
+    I = await api('/api/galleria');
+  } catch (e) {
+    $('#contenuto').innerHTML = `<div class="messaggio"><b>${esc(e.message)}</b><br><br>Accendi il disco e ricarica la pagina.</div>`;
+    return;
+  }
+  addEventListener('hashchange', instrada);
+  instrada();
+})();
+</script>
+</body>
+</html>

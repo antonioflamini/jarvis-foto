@@ -170,6 +170,8 @@ try {
   Collegamento (Join-Path $desktop 'JARVIS Foto.lnk') (Join-Path $Dest 'JARVIS.bat') '' 'JARVIS Foto: importa, backup, verifica'
   Collegamento (Join-Path $desktop 'JARVIS Arrivi.lnk') $Arrivi '' 'Copia qui foto, cartelle e zip: JARVIS li sistema'
   CollegamentoWeb (Join-Path $desktop 'JARVIS Pannello.url') 'http://127.0.0.1:7777/'
+  CollegamentoWeb (Join-Path $desktop 'JARVIS Galleria.url') 'http://127.0.0.1:7777/galleria'
+  CollegamentoWeb (Join-Path $menu 'JARVIS Galleria.url') 'http://127.0.0.1:7777/galleria'
   Collegamento (Join-Path $menu 'JARVIS Foto.lnk') (Join-Path $Dest 'JARVIS.bat') '' 'JARVIS Foto'
   CollegamentoWeb (Join-Path $menu 'JARVIS Pannello.url') 'http://127.0.0.1:7777/'
   Collegamento (Join-Path $menu 'Aggiorna JARVIS.lnk') (Join-Path $Dest 'aggiorna.bat') '' 'Scarica la nuova versione da GitHub'

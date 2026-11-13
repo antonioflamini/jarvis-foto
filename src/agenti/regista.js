@@ -25,6 +25,7 @@ export class Regista extends EventEmitter {
     this.server = null;
     this.url = null;
     this.ultimaApertura = 0;
+    this.estensioni = []; // altre pagine del pannello (es. galleria): (url, richiesta, risposta) => true se gestita
   }
 
   async avvia() {
@@ -46,6 +47,11 @@ export class Regista extends EventEmitter {
 
   async #gestisci(q, r) {
     const u = new URL(q.url, 'http://x');
+    for (const estensione of this.estensioni) {
+      try {
+        if (await estensione(u, q, r)) return;
+      } catch { /* l'estensione ha già risposto o non era sua */ }
+    }
     if (u.pathname === '/') {
       r.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       return fs.createReadStream(PAGINA).pipe(r);

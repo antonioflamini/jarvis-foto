@@ -10,6 +10,7 @@ import jpegjs from 'jpeg-js';
 import { Jarvis } from '../src/jarvis.js';
 import { caricaConfig } from '../src/config.js';
 import { Sentinella } from '../src/agenti/sentinella.js';
+import { jpegIncorporati, anteprimaRaw } from '../src/agenti/galleria.js';
 
 // ---------- Generatori di file finti ----------
 
@@ -393,6 +394,34 @@ try {
     } finally {
       j2.regista.chiudi();
     }
+  });
+
+  await prova('anteprima dei RAW: trova il JPEG più grande dentro il file', async () => {
+    const piccola = jpeg({ seme: 4001, scala: 0.3 });
+    const grande = jpeg({ data: '2025:05:03 10:50:56', seme: 4002 }); // contiene a sua volta metadati EXIF
+    const raw = Buffer.concat([Buffer.from('MM\0*\0\0\0\x08finto-raw'), Buffer.alloc(500, 7), piccola, Buffer.alloc(300, 1), grande, Buffer.alloc(200, 9)]);
+    const file = scrivi(tmp, 'finto/DSC_0001.NEF', raw);
+    const trovati = jpegIncorporati(raw);
+    assert.equal(trovati.length, 2);
+    const a = await anteprimaRaw(file, 100);
+    assert.ok(a && a.equals(grande));
+  });
+
+  await prova('galleria: anni, mesi, giornate e protezione dei percorsi', async () => {
+    const url = await j.regista.avvia();
+    const indice = await (await fetch(`${url}api/galleria`)).json();
+    assert.ok(indice.totali.Foto > 20);
+    const agosto = indice.sezioni.Foto.find((a) => a.anno === '2025').album.find((al) => al.titolo === 'Agosto');
+    assert.ok(agosto && agosto.n >= 14);
+    const album = await (await fetch(`${url}api/galleria/album?c=${encodeURIComponent(agosto.chiave)}`)).json();
+    const speciale = album.gruppi.find((g) => g.speciale);
+    assert.match(speciale.titolo, /Ferragosto/);
+    const r = await fetch(`${url}api/galleria/foto?p=${encodeURIComponent(speciale.voci[0].p)}`);
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get('content-type'), 'image/jpeg');
+    assert.equal((await fetch(`${url}api/galleria/foto?p=${encodeURIComponent('../../segreto.txt')}`)).status, 404);
+    assert.equal((await fetch(`${url}api/galleria/mostra?p=x`, { method: 'POST' })).status, 404, 'senza intestazione speciale non risponde');
+    assert.match(await (await fetch(`${url}galleria`)).text(), /GALLERIA/);
   });
 
   await prova('stato e diagnostica', async () => {

@@ -38,6 +38,7 @@ echo    1  Importa da chiavetta / scheda / telefono
 echo    2  Importa da una cartella o da uno zip
 echo    3  Backup su hard disk esterno
 echo    4  Verifica il backup
+echo    G  Galleria: sfoglia l'archivio
 echo    5  Apri il pannello olografico
 echo    6  Stato dell'archivio
 echo    7  Sistema la cartella Arrivi
@@ -83,6 +84,10 @@ if "%scelta%"=="4" (
 )
 if "%scelta%"=="5" (
   "%NODE%" src\cli.js pannello
+  goto menu
+)
+if /i "%scelta%"=="G" (
+  "%NODE%" src\cli.js galleria
   goto menu
 )
 if "%scelta%"=="6" (

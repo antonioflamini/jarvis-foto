@@ -11,17 +11,20 @@ import {
 } from './agenti/archivista.js';
 import { backup, verificaBackup } from './agenti/custode.js';
 import { Regista } from './agenti/regista.js';
+import { Galleria } from './agenti/galleria.js';
 import { contaMultimediali, sentinellaInEsecuzione, SOGLIA_SPAZIO_BASSO } from './agenti/sentinella.js';
 import { leggiJSON, numero, byteLeggibili, saluto, nomeSicuro, cartellaMese, ora, esiste, inParallelo } from './util.js';
 import { tipoDi } from './agenti/esploratore.js';
 
-export const VERSIONE = '1.4.0';
+export const VERSIONE = '1.5.0';
 const MARGINE_SPAZIO = 1024 ** 3; // dopo un'importazione devono restare almeno 1 GB liberi
 
 export class Jarvis {
   constructor(cfg) {
     this.cfg = cfg;
     this.regista = new Regista(cfg);
+    this.galleria = new Galleria(this);
+    this.regista.estensioni.push((u, q, r) => this.galleria.gestisci(u, q, r));
     this.lavoroInCorso = null;
     this.ultimoEsito = null;
     this.progresso = null;
@@ -111,6 +114,7 @@ export class Jarvis {
   }
 
   #chiudi(fine) {
+    this.galleria.invalida();
     this.lavoroInCorso = null;
     this.ultimoEsito = fine;
     this.emetti({ t: 'fine', ...fine });
@@ -127,7 +131,7 @@ export class Jarvis {
   async anteprima(sorgente) {
     this.#richiediArchivio();
     this.#controllaSorgente(sorgente);
-    const { file, pulisci } = await esplora(sorgente, { escludi: this.#escluse });
+    const { file, pulisci, zipSaltati } = await esplora(sorgente, { escludi: this.#escluse });
     try {
       const indice = new Indice(this.cfg.archivio);
       await indice.carica(null, this.cfg.simili);
@@ -153,6 +157,7 @@ export class Jarvis {
         luoghi: [...new Set(nuovi.map((p) => p.luogo).filter(Boolean))].slice(0, 15), fontiData: fonti,
         esempi: nuovi.slice(0, 8).map((p) => `${p.nome} → ${p.destRel.replace(/\\/g, '/')}`),
         archivio: this.cfg.archivio,
+        zipSaltati: zipSaltati?.length ? zipSaltati : undefined,
       };
     } finally {
       await pulisci();

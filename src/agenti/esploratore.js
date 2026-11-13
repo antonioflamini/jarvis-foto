@@ -73,6 +73,7 @@ export async function esplora(sorgente, opz = {}) {
 
   const temporanee = [];
   const trovati = [];
+  const zipSaltati = [];
   const jsonPerCartella = new Map();
   const escludi = [].concat(opz.escludi || []).map((e) => path.resolve(e).toLowerCase());
 
@@ -81,7 +82,13 @@ export async function esplora(sorgente, opz = {}) {
     const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'jarvis-zip-'));
     temporanee.push(tmp);
     opz.suMessaggio?.(`Apro lo zip ${path.basename(fileZip)}…`);
-    await estraiZip(fileZip, tmp, (n) => n % 50 === 0 && opz.suMessaggio?.(`Estratti ${n} file da ${path.basename(fileZip)}`));
+    try {
+      await estraiZip(fileZip, tmp, (n) => n % 50 === 0 && opz.suMessaggio?.(`Estratti ${n} file da ${path.basename(fileZip)}`));
+    } catch (e) {
+      // Uno zip rotto (o bloccato dall'antivirus) non deve fermare tutto: lo salto e vado avanti.
+      zipSaltati.push(path.basename(fileZip));
+      opz.suMessaggio?.(`Salto lo zip ${path.basename(fileZip)}: non si apre (${e.message.replace(/^Impossibile aprire lo zip "[^"]*": /, '')})`);
+    }
     await cammina(tmp, profondita + 1, path.basename(fileZip));
   }
 
@@ -135,6 +142,7 @@ export async function esplora(sorgente, opz = {}) {
   opz.suProgresso?.(trovati.length);
   return {
     file: trovati,
+    zipSaltati,
     pulisci: async () => {
       for (const t of temporanee) await fsp.rm(t, { recursive: true, force: true }).catch(() => {});
     },
