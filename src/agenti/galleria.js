@@ -60,10 +60,17 @@ export function jpegIncorporati(buf) {
 }
 
 /** L'anteprima JPG più grande salvata dentro un RAW (o null). */
-export async function anteprimaRaw(file, minimo = 20000) {
+export async function anteprimaRaw(file, minimo = 20000, piccola = false) {
   const buf = await fsp.readFile(file);
+  const lung = (j) => j.fine - j.inizio;
   let migliore = null;
-  for (const j of jpegIncorporati(buf)) if (!migliore || j.fine - j.inizio > migliore.fine - migliore.inizio) migliore = j;
+  const tutti = jpegIncorporati(buf);
+  if (piccola) {
+    // per le miniature basta l'anteprima media (di solito ~600 pixel): molto più leggera di quella intera
+    for (const j of tutti) if (lung(j) > 8000 && (!migliore || lung(j) < lung(migliore))) migliore = j;
+    if (migliore) return buf.subarray(migliore.inizio, migliore.fine);
+  }
+  for (const j of tutti) if (!migliore || lung(j) > lung(migliore)) migliore = j;
   // sotto i 20 KB è solo la miniatura: meglio niente che un'immagine sgranata a tutto schermo
   return migliore && migliore.fine - migliore.inizio > minimo ? buf.subarray(migliore.inizio, migliore.fine) : null;
 }
@@ -174,12 +181,12 @@ export class Galleria {
     };
   }
 
-  async #cacheAnteprima(abs) {
+  async #cacheAnteprima(abs, piccola = false) {
     const st = await fsp.stat(abs);
     const nome = crypto.createHash('sha1').update(`${abs}|${st.size}|${st.mtimeMs}`).digest('hex');
-    const file = path.join(this.archivio, '_JARVIS', 'anteprime', `${nome}.jpg`);
+    const file = path.join(this.archivio, '_JARVIS', 'anteprime', `${nome}${piccola ? '_min' : ''}.jpg`);
     try { return await fsp.readFile(file); } catch { /* da creare */ }
-    const jpg = await anteprimaRaw(abs);
+    const jpg = await anteprimaRaw(abs, 20000, piccola);
     if (jpg) {
       await fsp.mkdir(path.dirname(file), { recursive: true });
       await fsp.writeFile(file, jpg).catch(() => {});
@@ -216,7 +223,7 @@ export class Galleria {
         const t = await miniaturaEXIF(abs);
         if (t?.length) { r.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'max-age=86400' }); r.end(t); return true; }
         if (RAW.has(ext)) {
-          const jpg = await this.#cacheAnteprima(abs);
+          const jpg = await this.#cacheAnteprima(abs, true);
           if (jpg) { r.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'max-age=86400' }); r.end(jpg); return true; }
         }
         if (MIME[ext]?.startsWith('image/') && (await fsp.stat(abs)).size < 25 * 1024 * 1024) return this.#invia(abs, ext, q, r);
