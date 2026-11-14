@@ -478,9 +478,15 @@ try {
 
     // motore con un finto modello: l'impronta dipende dal mese della foto / dalla parola cercata
     const vettore = (k) => Array.from({ length: 256 }, (_, i) => (i === k ? 1 : 0.01));
+    // volti finti: nelle foto di agosto c'è sempre "la stessa persona", in quelle di dicembre un'altra
+    const volto = (k) => ({ b: [0.4, 0.3, 0.2, 0.25], e: Float32Array.from({ length: 128 }, (_, i) => (i === k ? 1 : 0)) });
     const ia = new MotoreIA(j, {
       cartella: path.join(tmp, 'ia'),
-      calcola: async (tipo, x) => vettore(tipo === 'testo' ? (x === 'agosto' ? 8 : 1) : Number(x.match(/(\d{4})-(\d{2})-\d{2}_/)?.[2] || 0)),
+      calcola: async (tipo, x) => {
+        const mese = Number(x.match(/(\d{4})-(\d{2})-\d{2}_/)?.[2] || 0);
+        if (tipo === 'volti') return mese === 8 ? [volto(3)] : mese === 12 ? [volto(9)] : [];
+        return vettore(tipo === 'testo' ? (x === 'agosto' ? 8 : 1) : mese);
+      },
     });
     const vero = j.ia;
     j.ia = ia;
@@ -501,10 +507,42 @@ try {
       const web = await (await fetch(`${url}api/galleria/cerca?q=agosto`)).json();
       assert.ok(web.risultati.length >= 14 && web.risultati[0].nome);
       assert.equal((await fetch(`${url}api/galleria/cerca?q=`)).status, 400);
+
+      // persone: due gruppi di volti, il nome si dà una volta e poi si cerca per nome
+      const persone = await ia.elencoPersone(1);
+      assert.equal(persone.length, 2);
+      const agosto = persone.find((p) => p.n >= 14);
+      assert.ok(agosto && agosto.volto);
+      const rn = await (await fetch(`${url}api/galleria/persona?id=${agosto.id}&nome=Viola`, { method: 'POST', headers: { 'x-jarvis': '1' } })).json();
+      assert.equal(rn.nome, 'Viola');
+      assert.equal((await fetch(`${url}api/galleria/persona?id=${agosto.id}&nome=X`, { method: 'POST' })).status, 404, 'senza intestazione speciale non rinomina');
+      const perNome = await ia.cerca('foto di viola');
+      assert.equal(perNome.persona, 'Viola');
+      assert.ok(perNome.risultati.length >= 14 && perNome.risultati.every((x) => /\/08 Agosto\//.test(x.p)));
+      // dare lo stesso nome all'altro gruppo li unisce
+      const altro = persone.find((p) => p.id !== agosto.id);
+      const unito = await ia.rinomina(altro.id, 'viola');
+      assert.ok(unito.unito);
+      assert.equal((await ia.elencoPersone(1)).length, 1);
+      const pagina = await (await fetch(`${url}api/galleria/persona?id=${unito.id}`)).json();
+      assert.ok(pagina.voci.length > perNome.risultati.length);
     } finally {
       j.ia = vero;
       fs.rmSync(path.join(archivio, '_JARVIS/ia'), { recursive: true, force: true });
     }
+  });
+
+  await prova('volti: allineamento dei punti e raggruppamento', async () => {
+    const { trasformazione, raggruppa } = await import('../src/agenti/ia/volti.js');
+    const dst = [[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.7299, 92.2041]];
+    const t1 = trasformazione(dst.map(([x, y]) => [x * 2 + 100, y * 2 + 50]));
+    assert.ok(Math.abs(t1.ka - 0.5) < 1e-6 && Math.abs(t1.kb) < 1e-6, 'volto grande il doppio: scala dimezzata, nessuna rotazione');
+    const v = (k, d = 0) => ({ id: `${k}-${d}`, e: Float32Array.from({ length: 128 }, (_, i) => (i === k ? 1 : i === k + 1 ? d : 0)).map((x, _, a) => x / Math.hypot(...a)) });
+    const gruppi = [];
+    const a = raggruppa([v(1), v(1, 0.2), v(5), v(1, 0.1)], gruppi, 0.52);
+    assert.equal(gruppi.length, 2);
+    assert.equal(a.get('1-0'), a.get('1-0.2'));
+    assert.notEqual(a.get('1-0'), a.get('5-0'));
   });
 
   await prova('stato e diagnostica', async () => {

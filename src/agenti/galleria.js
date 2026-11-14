@@ -303,6 +303,29 @@ export class Galleria {
         } catch (e) { json(503, { errore: e.message }); }
         return true;
       }
+      if (azione === '/persone') {
+        json(200, { persone: await this.jarvis.ia.elencoPersone(), ...this.jarvis.ia.stato });
+        return true;
+      }
+      if (azione === '/persona') {
+        const id = u.searchParams.get('id') || '';
+        if (q.method === 'POST') {
+          if (q.headers['x-jarvis'] !== '1') { r.writeHead(404); r.end(); return true; }
+          json(200, await this.jarvis.ia.rinomina(id, u.searchParams.get('nome')));
+          return true;
+        }
+        const foto = await this.jarvis.ia.fotoDi(id);
+        const persona = (await this.jarvis.ia.elencoPersone(0)).find((x) => x.id === id);
+        json(200, { id, nome: persona?.nome || '', voci: foto.map((p) => ({ p, nome: p.split('/').pop(), tipo: 'foto' })) });
+        return true;
+      }
+      if (azione === '/volto') {
+        const jpg = await this.jarvis.ia.ritaglioVolto(u.searchParams.get('id') || '').catch(() => null);
+        if (!jpg) { r.writeHead(404); r.end(); return true; }
+        r.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'max-age=3600' });
+        r.end(jpg);
+        return true;
+      }
       if (azione === '/oggi') {
         const d = u.searchParams.get('d')?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
         json(200, await this.ricordi(d ? new Date(Number(d[1]), Number(d[2]) - 1, Number(d[3])) : new Date()));

@@ -60,6 +60,15 @@ h2.spec{color:var(--a);border-bottom-color:rgba(255,181,71,.35)}
 .cop .t{border:0;cursor:inherit}
 .cop div.n{padding:10px 12px;display:flex;justify-content:space-between;font-weight:700;letter-spacing:.05em}
 .cop div.n small{font-family:var(--fm);font-weight:400;color:var(--mut)}
+.persone{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:16px;margin-top:14px}
+.pers{cursor:pointer;text-align:center}
+.pers img,.pers .vuoto{width:120px;height:120px;border-radius:50%;object-fit:cover;border:2px solid var(--cd);background:var(--pan);display:block;margin:0 auto}
+.pers:hover img{border-color:var(--c);box-shadow:0 0 18px rgba(73,231,255,.35)}
+.pers b{display:block;margin-top:8px;font-size:16px;color:#fff}
+.pers b.senza{color:var(--mut);font-weight:500;font-style:italic}
+.pers small{font-family:var(--fm);font-size:11px;color:var(--mut)}
+.nomina{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 18px}
+.nomina input{font-family:var(--ft);font-size:16px;font-weight:600;background:var(--pan);color:#fff;border:1px solid var(--cd);padding:8px 12px;min-width:240px}
 .messaggio{margin:60px auto;max-width:520px;text-align:center;color:var(--mut);font-size:18px;line-height:1.5}
 .messaggio b{color:var(--a)}
 /* visore */
@@ -153,6 +162,11 @@ function disegnaSezioni() {
   if (sezione === 'oggi') o.className = 'att';
   o.onclick = () => { location.hash = 'oggi'; };
   $('#sezioni').appendChild(o);
+  const pe = document.createElement('button');
+  pe.innerHTML = '☺ PERSONE';
+  if (sezione === 'persone') pe.className = 'att';
+  pe.onclick = () => { location.hash = 'persone'; };
+  $('#sezioni').appendChild(pe);
   for (const s of Object.keys(NOMI)) {
     if (!I.totali[s] && s !== 'Foto') continue;
     const b = document.createElement('button');
@@ -281,8 +295,9 @@ async function instrada() {
   const parti = decodeURIComponent(location.hash.slice(1)).split('/').filter(Boolean);
   if (parti[0] === 'cerca') { sezione = 'cerca'; disegnaSezioni(); $('#anni').innerHTML = ''; return vistaRicerca(parti.slice(1).join('/')); }
   if (parti[0] === 'oggi') { sezione = 'oggi'; disegnaSezioni(); $('#anni').innerHTML = ''; return vistaOggi(parti[1]); }
+  if (parti[0] === 'persone') { sezione = 'persone'; disegnaSezioni(); $('#anni').innerHTML = ''; return parti[1] ? vistaPersona(parti[1]) : vistaPersone(); }
   if (parti[0] && NOMI[parti[0]]) sezione = parti[0];
-  else if (sezione === 'oggi' || sezione === 'cerca') sezione = 'Foto';
+  else if (['oggi', 'cerca', 'persone'].includes(sezione)) sezione = 'Foto';
   disegnaSezioni();
   try {
     const chiave = parti.join('/');
@@ -327,6 +342,55 @@ async function instrada() {
 </div>
 
 <script>
+// ---------- Persone (volti riconosciuti sul PC) ----------
+async function vistaPersone() {
+  const c = $('#contenuto');
+  c.innerHTML = '<div class="messaggio">Carico le persone…</div>';
+  const r = await fetch('/api/galleria/persone');
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { c.innerHTML = `<div class="messaggio"><b>${esc(d.errore || 'Non disponibile')}</b></div>`; return; }
+  const parziale = d.inCorso ? ` · JARVIS sta ancora guardando le foto (${fmt(d.indicizzate)} di ${fmt(d.totali)}): ne arriveranno altre` : '';
+  c.innerHTML = `<h1>PERSONE</h1><div class="sotto">${fmt(d.persone.length)} volti ricorrenti${parziale}. Clicca un volto e scrivi il nome: se dai lo stesso nome a due gruppi, JARVIS li unisce.</div>`;
+  if (!d.persone.length) {
+    c.insertAdjacentHTML('beforeend', `<div class="messaggio">Ancora nessun volto.<br>Attiva la ricerca intelligente (tasto destro sull'icona di JARVIS accanto all'orologio) e lascia a JARVIS il tempo di guardare le foto.</div>`);
+    return;
+  }
+  const g = document.createElement('div');
+  g.className = 'persone';
+  for (const p of d.persone) {
+    const el = document.createElement('div');
+    el.className = 'pers';
+    el.innerHTML = (p.volto ? `<img loading="lazy" src="/api/galleria/volto?id=${encodeURIComponent(p.volto)}" alt="">` : '<div class="vuoto"></div>') +
+      `<b class="${p.nome ? '' : 'senza'}">${esc(p.nome || 'senza nome')}</b><small>${fmt(p.n)} volti</small>`;
+    el.onclick = () => { location.hash = 'persone/' + encodeURIComponent(p.id); };
+    g.appendChild(el);
+  }
+  c.appendChild(g);
+}
+
+async function vistaPersona(id) {
+  const c = $('#contenuto');
+  c.innerHTML = '<div class="messaggio">Carico…</div>';
+  const d = await api('/api/galleria/persona?id=' + encodeURIComponent(id));
+  elenco = d.voci;
+  c.innerHTML = `<h1>${esc(d.nome || 'Persona senza nome')}</h1><div class="sotto">${fmt(elenco.length)} foto</div>` +
+    `<div class="nomina"><input id="nomePersona" placeholder="Chi è? Scrivi il nome e premi Invio" value="${esc(d.nome)}"><button class="btn" id="salvaNome">SALVA NOME</button>` +
+    `<button class="btn" id="videoPersona">▶ CREA VIDEO RICORDO</button><a class="btn" href="#persone">‹ TUTTE LE PERSONE</a></div>`;
+  const salva = async () => {
+    const nome = $('#nomePersona').value.trim();
+    const r = await fetch(`/api/galleria/persona?id=${encodeURIComponent(id)}&nome=${encodeURIComponent(nome)}`, { method: 'POST', headers: { 'x-jarvis': '1' } });
+    const x = await r.json();
+    if (x.unito || x.id !== id) location.hash = 'persone/' + encodeURIComponent(x.id); else c.querySelector('h1').textContent = nome || 'Persona senza nome';
+  };
+  $('#salvaNome').onclick = salva;
+  $('#nomePersona').onkeydown = (e) => { if (e.key === 'Enter') salva(); };
+  $('#videoPersona').onclick = () => apriRegia(elenco, d.nome || 'Ricordi', '');
+  const g = document.createElement('div');
+  g.className = 'griglia';
+  elenco.forEach((v, i) => { const t = miniatura(v); t.onclick = () => apriVisore(i); g.appendChild(t); });
+  c.appendChild(g);
+}
+
 // ---------- Ricerca con le parole (AI sul PC) ----------
 $('#cerca').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
