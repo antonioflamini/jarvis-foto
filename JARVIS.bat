@@ -39,6 +39,7 @@ echo    2  Importa da una cartella o da uno zip
 echo    3  Backup su hard disk esterno
 echo    4  Verifica il backup
 echo    G  Galleria: sfoglia l'archivio
+echo    I  Ricerca intelligente: attiva e guarda tutte le foto adesso
 echo    5  Apri il pannello olografico
 echo    6  Stato dell'archivio
 echo    7  Sistema la cartella Arrivi
@@ -84,6 +85,11 @@ if "%scelta%"=="4" (
 )
 if "%scelta%"=="5" (
   "%NODE%" src\cli.js pannello
+  goto menu
+)
+if /i "%scelta%"=="I" (
+  "%NODE%" src\cli.js ia
+  pause
   goto menu
 )
 if /i "%scelta%"=="G" (

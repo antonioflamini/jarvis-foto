@@ -58,6 +58,20 @@ async function aggiornaAvvioAutomatico() {
   if (out && out.includes('convertito')) registra('Avvio automatico aggiornato: ora parte senza VBScript');
 }
 
+// AI: guarda le foto nuove quando il PC è libero (ogni 10 minuti controlla se c'è qualcosa da fare).
+let timerIA = null;
+function avviaIndicizzazione() {
+  const giro = () => {
+    if (jarvis.ia.stato.inCorso || jarvis.lavoroInCorso || !jarvis.archivioDisponibile()) return;
+    jarvis.ia.indicizza({ pausa: 150 }).then((s) => {
+      if (s.errore) registra(`AI: ${s.errore}`);
+      else registra(`AI: foto guardate ${s.indicizzate} di ${s.totali}`);
+    }).catch(() => {});
+  };
+  if (!timerIA) { timerIA = setInterval(giro, 10 * 60000); timerIA.unref(); }
+  setTimeout(giro, 60000).unref(); // un minuto dopo l'avvio, per non rallentare l'accensione del PC
+}
+
 // Icona accanto all'orologio: menu con le azioni e stato sempre visibile.
 function avviaVassoio() {
   const apri = (cosa) => spawnStacca('explorer.exe', [cosa]);
@@ -78,6 +92,18 @@ function avviaVassoio() {
         if (r.esito === 'errore') v.avviso('Non posso sistemare gli Arrivi', r.errore);
         return null;
       }
+      case 'ia-attiva':
+        if (jarvis.ia.modelliPresenti()) {
+          const s = jarvis.ia.stato;
+          return v.avviso('Ricerca intelligente attiva', s.inCorso ? `Sto guardando le foto: ${numero(s.indicizzate)} di ${numero(s.totali)}. Puoi già cercare nella galleria.` : 'Scrivi cosa cerchi nella barra in alto della galleria.');
+        }
+        v.avviso("Scarico l'intelligenza artificiale", 'Circa 210 MB, una volta sola. Ti avviso quando è pronta.');
+        try {
+          await jarvis.ia.scarica();
+          v.avviso('Ricerca intelligente pronta', "Adesso guardo le tue foto quando il PC è libero: ci vorrà un po'. Intanto puoi già cercare quelle che ho visto.");
+          avviaIndicizzazione();
+        } catch (e) { v.avviso('Scaricamento non riuscito', e.message); }
+        return null;
       case 'backup':
         if (!cfg.backup) return v.avviso('Backup non impostato', 'Collega il disco del backup, poi apri JARVIS Foto (menu completo) e scegli 3.');
         return jarvis.backup().then((r) => { if (r.esito === 'errore') v.avviso('Backup non riuscito', r.errore); });
@@ -102,6 +128,8 @@ function avviaVassoio() {
       const p = jarvis.progresso;
       const perc = p?.t === 'file' && p.n ? ` ${Math.round((p.i / p.n) * 100)}%` : '';
       t = `JARVIS · ${jarvis.lavoroInCorso.modo === 'backup' ? 'backup in corso' : 'sto lavorando'}${perc}`;
+    } else if (jarvis.ia.stato.inCorso) {
+      t = `JARVIS · AI: guardate ${numero(jarvis.ia.stato.indicizzate)} di ${numero(jarvis.ia.stato.totali)} foto`;
     } else if (!jarvis.archivioDisponibile()) {
       t = `JARVIS · disco ${jarvis.discoArchivio} spento`;
     } else {
@@ -215,12 +243,26 @@ try {
       registra(`Sentinella avviata · archivio ${cfg.archivio}`);
       aggiornaAvvioAutomatico().catch(() => {});
       vassoio = avviaVassoio(s);
+      if (jarvis.ia.modelliPresenti()) avviaIndicizzazione();
       console.log(`  ${C.g}● In ascolto.${C.x} Inserisci una scheda o una chiavetta, o copia file in Arrivi: ti chiederò cosa fare. (Ctrl+C per uscire)`);
       await jarvis.regista.avvia();
       jarvis.regista.server?.ref();
       await jarvis.stato(); // il pannello mostra subito l'archivio e gli ultimi arrivi
       jarvis.regista.on('evento', (e) => { if (e.t === 'fine') setTimeout(() => jarvis.stato().catch(() => {}), 1500); });
       await new Promise(() => {});
+      break;
+    }
+    case 'ia': {
+      // Attiva la ricerca intelligente e guarda subito tutte le foto (dal menu: tasto I)
+      if (!jarvis.ia.modelliPresenti()) {
+        console.log('  Scarico i modelli di intelligenza artificiale (circa 210 MB, una volta sola)…');
+        await jarvis.ia.scarica((p, fatti) => process.stdout.write(`\r  Download  ${barra(p)} ${byteLeggibili(fatti)}   `));
+        console.log('\n');
+      }
+      if (!jarvis.archivioDisponibile()) throw new Error(`Il disco dell'archivio (${jarvis.discoArchivio}) è spento: accendilo e riprova.`);
+      console.log('  Guardo le foto (puoi interrompere quando vuoi con Ctrl+C: riprendo da dove ero rimasto)…');
+      const s = await jarvis.ia.indicizza({ pausa: 0, suProgresso: (x) => process.stdout.write(`\r  Foto      ${barra(x.indicizzate / Math.max(1, x.totali))} ${numero(x.indicizzate)}/${numero(x.totali)}   `) });
+      console.log(s.errore ? `\n  ${C.r}✖ ${s.errore}${C.x}` : `\n  ${C.g}✔ Fatto.${C.x} Apri la galleria e scrivi cosa cerchi nella barra in alto.`);
       break;
     }
     case 'supporti':

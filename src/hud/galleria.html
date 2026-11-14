@@ -30,6 +30,10 @@ nav button:hover,.btn:hover{border-color:var(--c);color:#fff}
 nav button.att{border-color:var(--c);background:rgba(73,231,255,.18);color:#fff;text-shadow:0 0 8px var(--c)}
 nav button b{font-family:var(--fm);font-weight:400;color:var(--c);margin-left:6px}
 .spazio{flex:1}
+#cerca{flex:1;min-width:200px;max-width:460px;font-family:var(--ft);font-size:16px;font-weight:600;background:var(--pan);color:#fff;border:1px solid var(--cd);padding:9px 14px 9px 38px;outline:none;
+  background-image:radial-gradient(circle at 18px 50%,transparent 5px,var(--c) 6px,transparent 7px)}
+#cerca:focus{border-color:var(--c);box-shadow:0 0 14px rgba(73,231,255,.3)}
+#cerca::placeholder{color:var(--mut);font-weight:500}
 aside{border-right:1px solid var(--cd);overflow-y:auto;padding:12px 10px 40px}
 .anno{font-family:var(--fh);font-weight:700;font-size:15px;letter-spacing:.2em;color:var(--c2);padding:12px 10px 6px;display:flex;justify-content:space-between;cursor:pointer}
 .anno small{font-family:var(--fm);font-size:11px;color:var(--mut);letter-spacing:0}
@@ -95,7 +99,7 @@ h2 .btn{margin-left:auto;font-size:10px;padding:6px 12px}
 <header>
   <div class="logo">J.A.R.V.I.S.<small>GALLERIA</small></div>
   <nav id="sezioni"></nav>
-  <div class="spazio"></div>
+  <input id="cerca" type="search" placeholder="Cerca con le parole: tramonto, torta, cane…" autocomplete="off">
   <a class="btn" href="/" title="Pannello del lavoro in corso">PANNELLO</a>
 </header>
 <aside id="anni"></aside>
@@ -275,9 +279,10 @@ addEventListener('keydown', (e) => {
 
 async function instrada() {
   const parti = decodeURIComponent(location.hash.slice(1)).split('/').filter(Boolean);
+  if (parti[0] === 'cerca') { sezione = 'cerca'; disegnaSezioni(); $('#anni').innerHTML = ''; return vistaRicerca(parti.slice(1).join('/')); }
   if (parti[0] === 'oggi') { sezione = 'oggi'; disegnaSezioni(); $('#anni').innerHTML = ''; return vistaOggi(parti[1]); }
   if (parti[0] && NOMI[parti[0]]) sezione = parti[0];
-  else if (sezione === 'oggi') sezione = 'Foto';
+  else if (sezione === 'oggi' || sezione === 'cerca') sezione = 'Foto';
   disegnaSezioni();
   try {
     const chiave = parti.join('/');
@@ -322,6 +327,36 @@ async function instrada() {
 </div>
 
 <script>
+// ---------- Ricerca con le parole (AI sul PC) ----------
+$('#cerca').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const q = e.target.value.trim();
+  if (q) location.hash = 'cerca/' + encodeURIComponent(q);
+});
+async function vistaRicerca(q) {
+  const c = $('#contenuto');
+  $('#cerca').value = q;
+  c.innerHTML = '<div class="messaggio">Cerco…</div>';
+  const r = await fetch('/api/galleria/cerca?q=' + encodeURIComponent(q));
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    c.innerHTML = `<div class="messaggio"><b>${esc(d.errore || 'Ricerca non disponibile')}</b><br><br>Per attivarla: tasto destro sull'icona di JARVIS accanto all'orologio → <b>Attiva la ricerca intelligente (AI)</b>, oppure menu JARVIS Foto → <b>I</b>.</div>`;
+    return;
+  }
+  elenco = d.risultati.map((x) => ({ p: x.p, nome: x.nome, tipo: 'foto' }));
+  const parziale = d.guardate < d.totali ? ` · JARVIS ha guardato ${fmt(d.guardate)} foto su ${fmt(d.totali)}: le altre arriveranno` : '';
+  c.innerHTML = `<h1>“${esc(q)}”</h1><div class="sotto">${fmt(elenco.length)} foto più somiglianti, dalla più vicina${parziale}</div>`;
+  const bv = document.createElement('button');
+  bv.className = 'btn'; bv.textContent = '▶ CREA VIDEO RICORDO';
+  bv.onclick = () => apriRegia(elenco.slice(0, 40), q.charAt(0).toUpperCase() + q.slice(1), '');
+  if (elenco.length) c.appendChild(bv);
+  const g = document.createElement('div');
+  g.className = 'griglia'; g.style.marginTop = '16px';
+  elenco.forEach((v, i) => { const t = miniatura(v); t.onclick = () => apriVisore(i); t.title = v.p; g.appendChild(t); });
+  c.appendChild(g);
+  c.scrollTop = 0;
+}
+
 // ---------- Accadde oggi ----------
 async function vistaOggi(giorno) {
   const c = $('#contenuto');

@@ -37,6 +37,7 @@ Voce 'Apri la cartella Arrivi' 'arrivi-cartella'
 Voce 'Sistema adesso la cartella Arrivi' 'arrivi-sistema'
 Voce 'Apri l''archivio delle foto' 'archivio-cartella'
 Voce 'Fai il backup adesso' 'backup'
+Voce 'Attiva la ricerca intelligente (AI)' 'ia-attiva'
 [void]$menu.Items.Add('-')
 Voce 'Menu completo (verifica, annulla, diagnostica...)' 'menu'
 Voce 'Chiudi JARVIS fino al prossimo avvio del PC' 'esci'

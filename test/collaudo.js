@@ -12,6 +12,8 @@ import { caricaConfig } from '../src/config.js';
 import { Sentinella } from '../src/agenti/sentinella.js';
 import { jpegIncorporati, anteprimaRaw, conOrientamento } from '../src/agenti/galleria.js';
 import exifr from 'exifr';
+import { Tokenizzatore } from '../src/agenti/ia/tokenizzatore.js';
+import { MotoreIA } from '../src/agenti/ia/motore.js';
 
 // ---------- Generatori di file finti ----------
 
@@ -460,6 +462,49 @@ try {
     assert.equal(indice.totali.Ricordi, 1);
     fs.rmSync(path.join(archivio, 'Ricordi'), { recursive: true, force: true });
     j.galleria.invalida();
+  });
+
+  await prova('AI: tokenizzatore multilingue (Unigram) e ricerca con le parole', async () => {
+    // tokenizer in miniatura con lo stesso formato di quello vero
+    const vocab = [['<s>', 0], ['<pad>', 0], ['</s>', 0], ['<unk>', 0], ['▁tra', -2], ['monto', -3], ['▁tramonto', -1.5], ['▁mare', -2], ['▁', -4], ['t', -6], ['a', -6], ['ò', -6]];
+    const fileTok = scrivi(tmp, 'ia/tokenizer.json', JSON.stringify({
+      model: { type: 'Unigram', unk_id: 3, vocab }, added_tokens: [{ id: 0, content: '<s>' }, { id: 1, content: '<pad>' }, { id: 2, content: '</s>' }],
+    }));
+    const tok = new Tokenizzatore(fileTok);
+    const c = tok.codifica('Tramonto  tramonto mare xyz', 12);
+    assert.deepEqual(c.ids, [0, 8, 3, 10, 5, 6, 7, 8, 3, 2, 1, 1], 'lettere ignote unite in un solo <unk>, parola intera preferita ai pezzi');
+    assert.deepEqual(c.maschera, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0]);
+    assert.equal(tok.codifica('mare '.repeat(50), 8).ids.at(-1), 2, 'frasi lunghe tagliate con la fine al suo posto');
+
+    // motore con un finto modello: l'impronta dipende dal mese della foto / dalla parola cercata
+    const vettore = (k) => Array.from({ length: 256 }, (_, i) => (i === k ? 1 : 0.01));
+    const ia = new MotoreIA(j, {
+      cartella: path.join(tmp, 'ia'),
+      calcola: async (tipo, x) => vettore(tipo === 'testo' ? (x === 'agosto' ? 8 : 1) : Number(x.match(/(\d{4})-(\d{2})-\d{2}_/)?.[2] || 0)),
+    });
+    const vero = j.ia;
+    j.ia = ia;
+    try {
+      const s = await ia.indicizza({ pausa: 0 });
+      assert.equal(s.errore, null);
+      assert.ok(s.indicizzate >= 20 && s.indicizzate === s.totali);
+      assert.ok(fs.existsSync(path.join(archivio, '_JARVIS/ia/impronte.json')));
+      const r = await ia.cerca('agosto');
+      assert.ok(r.risultati.length >= 14);
+      assert.ok(r.risultati.every((x) => /\/08 Agosto\//.test(x.p)), 'trova solo le foto di agosto');
+      // la seconda volta non riguarda le foto già viste
+      let chiamate = 0;
+      ia.calcola = async (tipo) => { chiamate++; return vettore(tipo === 'testo' ? 8 : 1); };
+      await ia.indicizza({ pausa: 0 });
+      assert.equal(chiamate, 0);
+      const url = await j.regista.avvia();
+      const web = await (await fetch(`${url}api/galleria/cerca?q=agosto`)).json();
+      assert.ok(web.risultati.length >= 14 && web.risultati[0].nome);
+      assert.equal((await fetch(`${url}api/galleria/cerca?q=`)).status, 400);
+    } finally {
+      j.ia = vero;
+      fs.rmSync(path.join(archivio, '_JARVIS/ia'), { recursive: true, force: true });
+    }
   });
 
   await prova('stato e diagnostica', async () => {

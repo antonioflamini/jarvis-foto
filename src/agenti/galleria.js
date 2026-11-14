@@ -289,6 +289,20 @@ export class Galleria {
       const azione = u.pathname.slice('/api/galleria'.length);
       if (azione === '' || azione === '/') { json(200, await this.indice()); return true; }
       if (azione === '/album') { json(200, await this.album(u.searchParams.get('c'))); return true; }
+      if (azione === '/ia') {
+        const ia = this.jarvis.ia;
+        json(200, { attiva: ia.modelliPresenti(), ...ia.stato });
+        return true;
+      }
+      if (azione === '/cerca') {
+        const frase = (u.searchParams.get('q') || '').trim().slice(0, 200);
+        if (!frase) { json(400, { errore: 'Scrivi cosa cercare.' }); return true; }
+        try {
+          const r = await this.jarvis.ia.cerca(frase);
+          json(200, { ...r, risultati: r.risultati.map((x) => ({ p: x.p, nome: x.p.split('/').pop(), tipo: 'foto', s: Math.round(x.s * 1000) / 1000 })) });
+        } catch (e) { json(503, { errore: e.message }); }
+        return true;
+      }
       if (azione === '/oggi') {
         const d = u.searchParams.get('d')?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
         json(200, await this.ricordi(d ? new Date(Number(d[1]), Number(d[2]) - 1, Number(d[3])) : new Date()));

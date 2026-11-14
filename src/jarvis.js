@@ -12,11 +12,12 @@ import {
 import { backup, verificaBackup } from './agenti/custode.js';
 import { Regista } from './agenti/regista.js';
 import { Galleria } from './agenti/galleria.js';
+import { MotoreIA } from './agenti/ia/motore.js';
 import { contaMultimediali, sentinellaInEsecuzione, SOGLIA_SPAZIO_BASSO } from './agenti/sentinella.js';
 import { leggiJSON, numero, byteLeggibili, saluto, nomeSicuro, cartellaMese, ora, esiste, inParallelo } from './util.js';
 import { tipoDi } from './agenti/esploratore.js';
 
-export const VERSIONE = '1.6.0';
+export const VERSIONE = '2.0.0';
 const MARGINE_SPAZIO = 1024 ** 3; // dopo un'importazione devono restare almeno 1 GB liberi
 
 export class Jarvis {
@@ -24,6 +25,7 @@ export class Jarvis {
     this.cfg = cfg;
     this.regista = new Regista(cfg);
     this.galleria = new Galleria(this);
+    this.ia = new MotoreIA(this);
     this.regista.estensioni.push((u, q, r) => this.galleria.gestisci(u, q, r));
     this.lavoroInCorso = null;
     this.ultimoEsito = null;

@@ -19,6 +19,8 @@ jobs:
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      ONNXRUNTIME_NODE_INSTALL_CUDA: skip
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -40,12 +42,22 @@ jobs:
           node-version: 22
 
       - name: Componenti
-        run: npm ci --omit=dev
+        run: npm ci --omit=dev --ignore-scripts
 
       - name: Estensione facoltativa per Claude Desktop
         # facoltativa: se non si crea, il pacchetto per Windows esce lo stesso
         continue-on-error: true
         run: npx -y @anthropic-ai/mcpb pack . jarvis-foto.mcpb
+
+      - name: Componenti dell'intelligenza artificiale solo per Windows
+        # il pacchetto si prepara su Linux: aggiungo il lettore di immagini per Windows e tolgo le parti degli altri sistemi
+        run: |
+          npm install --no-save --ignore-scripts --os=win32 --cpu=x64 sharp@$(node -p "require('./node_modules/sharp/package.json').version")
+          test -f node_modules/@img/sharp-win32-x64/package.json
+          rm -rf node_modules/onnxruntime-node/bin/napi-v*/linux node_modules/onnxruntime-node/bin/napi-v*/darwin node_modules/onnxruntime-node/bin/napi-v*/win32/arm64
+          rm -rf node_modules/@img/sharp-linux* node_modules/@img/sharp-libvips-linux* node_modules/@img/sharp-darwin* node_modules/@img/sharp-libvips-darwin* node_modules/@img/sharp-wasm32
+          ls node_modules/onnxruntime-node/bin/napi-v*/ node_modules/@img/
+          du -sh node_modules
 
       - name: Node.js portatile per Windows (verificato con SHA-256)
         run: |
