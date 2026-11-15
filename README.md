@@ -90,6 +90,7 @@ F:\JARVIS_Backup\
 - **Zip "store"**: le foto sono già compresse, così il backup è molto più veloce e gli zip si aprono con Windows senza programmi aggiuntivi.
 - **Ogni zip viene verificato** prima di sostituire il precedente. Se un mese supera 3,8 GB lo divide in parti, così funziona anche su chiavette formattate FAT32.
 - **Verifica profonda**: ricalcola l'impronta di ogni foto dentro gli zip e la confronta con l'archivio.
+- **Più dischi**: se il disco non basta, JARVIS salva i mesi che entrano (lasciando sempre 1 GB libero) e ricorda il resto. Quando colleghi un altro disco ti chiede se continuare lì. Ogni disco ha un numero (file `DISCO_1.txt`, `DISCO_2.txt`…) da scrivere sull'etichetta; ogni mese sta su un solo disco, e si aggiorna collegando quel disco.
 
 ---
 

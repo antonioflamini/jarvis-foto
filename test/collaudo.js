@@ -367,6 +367,59 @@ try {
     assert.equal(r.danneggiati.length, 0);
   });
 
+  await prova('backup su più dischi: riempie il primo, continua sul secondo', async () => {
+    const reg = path.join(j.cfg.archivio, '_JARVIS', 'backup_dischi.json');
+    const ub = path.join(j.cfg.archivio, '_JARVIS', 'ultimo_backup.json');
+    const salvaReg = fs.readFileSync(reg);
+    const salvaUb = fs.readFileSync(ub);
+    fs.rmSync(reg);
+    const pesa = (d) => { let s = 0; for (const v of fs.readdirSync(d, { withFileTypes: true, recursive: true })) if (v.isFile()) s += fs.statSync(path.join(v.parentPath ?? v.path, v.name)).size; return s; };
+    const discoA = path.join(tmp, 'disco_piccolo');
+    const discoB = path.join(tmp, 'disco_grande');
+    fs.mkdirSync(discoA); fs.mkdirSync(discoB);
+    const totale = pesa(path.join(j.cfg.archivio, 'Foto')) + pesa(path.join(j.cfg.archivio, 'Da scegliere'));
+    const capienza = { [path.join(discoA, 'JARVIS_Backup')]: Math.floor(totale / 2) + 400 * 1024, [path.join(discoB, 'JARVIS_Backup')]: totale * 10 + 50 * 1024 ** 2 };
+    j.leggiLiberoBackup = async (dest) => 1024 ** 3 + capienza[dest] - pesa(dest); // 1 GB è il margine sempre lasciato libero
+    try {
+      const r1 = await j.backup({ destinazione: discoA });
+      assert.equal(r1.esito, 'pieno', r1.errore);
+      assert.equal(r1.disco, 1);
+      assert.ok(r1.restano.gruppi > 0 && r1.restano.byte > 0);
+      assert.ok(fs.existsSync(path.join(discoA, 'JARVIS_Backup', 'DISCO_1.txt')));
+      assert.equal((await j.promemoriaBackup()).restano.gruppi, r1.restano.gruppi, 'il promemoria ricorda che manca qualcosa');
+
+      // La sentinella vede un nuovo disco e propone di continuare
+      let domanda = '';
+      const s = new Sentinella(j, { chiedi: async (m) => { domanda = m; return true; }, info: async () => ({ tipo: 3, nome: 'Nuovo' }) });
+      assert.equal((await s.valuta(discoB)).azione, 'backup-continua');
+      assert.match(domanda, /non era finito/);
+      while (j.lavoroInCorso) await new Promise((x) => setTimeout(x, 50));
+      assert.equal(j.ultimoEsito.esito, 'ok', j.ultimoEsito.errore);
+      assert.equal(j.ultimoEsito.disco, 2);
+      assert.equal(j.ultimoEsito.restano.gruppi, 0);
+
+      // Ogni mese sta su un solo disco, e tutti i mesi sono salvati
+      const gA = Object.keys(JSON.parse(fs.readFileSync(path.join(discoA, 'JARVIS_Backup/backup_jarvis.json'))).gruppi).filter((k) => k !== 'Registro');
+      const gB = Object.keys(JSON.parse(fs.readFileSync(path.join(discoB, 'JARVIS_Backup/backup_jarvis.json'))).gruppi).filter((k) => k !== 'Registro');
+      assert.ok(gA.length && gB.length);
+      assert.equal(gA.filter((k) => gB.includes(k)).length, 0, 'nessun mese doppio');
+      assert.equal((await j.promemoriaBackup()).daFare, false);
+      const vB = await j.verifica({ destinazione: discoB });
+      assert.equal(vB.esito, 'ok');
+      assert.deepEqual(vB.nonSalvati, [], 'i mesi del disco 1 non risultano "non salvati"');
+
+      // Ricollego il primo disco: niente da rifare
+      const r3 = await j.backup({ destinazione: discoA });
+      assert.equal(r3.esito, 'ok', r3.errore);
+      assert.ok(r3.aggiornati <= 1, 'riscrive al massimo il registro');
+      assert.equal(r3.suAltroDisco, gB.length);
+    } finally {
+      delete j.leggiLiberoBackup;
+      fs.writeFileSync(reg, salvaReg);
+      fs.writeFileSync(ub, salvaUb);
+    }
+  });
+
   await prova('nome alla giornata (sostituisce il luogo)', async () => {
     await j.rinominaGiornata('2025-08-14', 'Ferragosto');
     assert.ok(esiste(`${MESE_AGOSTO}/2025-08-14 Giovedì - Ferragosto`));

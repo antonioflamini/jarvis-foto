@@ -14,6 +14,19 @@ import { tipoDi } from './esploratore.js';
 
 const LIMITE_PARTE = 3.8 * 1024 ** 3;
 const CARTELLA_BACKUP = 'JARVIS_Backup';
+const MARGINE_DISCO = 1024 ** 3; // lascio sempre 1 GB libero sul disco del backup
+
+async function spazioLibero(dir) {
+  const sf = await fsp.statfs(dir).catch(() => null);
+  return sf ? sf.bavail * sf.bsize : null;
+}
+
+// Registro dei dischi di backup (nell'archivio): numero di ogni disco e disco su cui sta ogni mese.
+export const fileRegistroDischi = (cfg) => path.join(cfg.archivio, '_JARVIS', 'backup_dischi.json');
+export async function leggiRegistroDischi(cfg) {
+  const r = await leggiJSON(fileRegistroDischi(cfg), null);
+  return { dischi: {}, gruppi: {}, restano: null, ...(r || {}) };
+}
 
 function chiaveGruppo(rel) {
   const p = rel.split(/[\\/]/);
@@ -122,7 +135,7 @@ function controllaContenuto(voci, lista) {
   return null;
 }
 
-export async function backup(cfg, { destinazione, completo = false, emetti = () => {} }) {
+export async function backup(cfg, { destinazione, completo = false, emetti = () => {}, leggiLibero = spazioLibero }) {
   const radiceDest = destinazione || cfg.backup;
   if (!radiceDest) throw new Error('Non so dove fare il backup: indica la cartella o l\'unità dell\'hard disk esterno (es. "F:\\").');
   if (!(await esiste(radiceDest))) throw new Error(`Non trovo "${radiceDest}". L'hard disk esterno è collegato?`);
@@ -135,23 +148,62 @@ export async function backup(cfg, { destinazione, completo = false, emetti = () 
   const fileManifesto = path.join(dest, 'backup_jarvis.json');
   const manifesto = await leggiJSON(fileManifesto, { versione: 1, gruppi: {} });
 
+  // Più dischi: ogni disco ha un numero; l'archivio ricorda su quale disco è salvato ogni mese.
+  const fileDischi = fileRegistroDischi(cfg);
+  const dischi = await leggiRegistroDischi(cfg);
+  if (!manifesto.idDisco) manifesto.idDisco = crypto.randomBytes(6).toString('hex');
+  const id = manifesto.idDisco;
+  if (!dischi.dischi[id]) {
+    const numeri = Object.values(dischi.dischi).map((d) => d.numero);
+    const numero = manifesto.numero && !numeri.includes(manifesto.numero) ? manifesto.numero : Math.max(0, ...numeri) + 1;
+    dischi.dischi[id] = { numero };
+  }
+  manifesto.numero = dischi.dischi[id].numero;
+  for (const [k, g] of Object.entries(manifesto.gruppi)) { // backup fatti prima di questa versione
+    if (k !== 'Registro' && !dischi.gruppi[k]) dischi.gruppi[k] = { disco: id, impronta: g.impronta, quando: g.quando };
+  }
+  const numeroDi = (idDisco) => dischi.dischi[idDisco]?.numero;
+  await fsp.writeFile(path.join(dest, `DISCO_${manifesto.numero}.txt`),
+    `Disco di backup n. ${manifesto.numero} di JARVIS Foto.\r\nScrivilo anche sull'etichetta del disco: se l'archivio non entra in un solo disco, JARVIS divide i mesi tra più dischi.\r\n`).catch(() => {});
+
   emetti({ t: 'messaggio', testo: 'Censimento dell\'archivio…' });
   const gruppi = await elencaArchivio(cfg.archivio);
-  const daFare = [];
+  const candidati = [];
+  const suAltriDischi = []; // mesi cambiati che stanno su un altro disco: si aggiornano collegando quel disco
+  let nAltrove = 0;
   for (const [k, lista] of gruppi) {
     const imp = improntaGruppo(lista);
+    const altrove = k !== 'Registro' && dischi.gruppi[k] && dischi.gruppi[k].disco !== id && numeroDi(dischi.gruppi[k].disco);
+    if (altrove) {
+      nAltrove++;
+      if (dischi.gruppi[k].impronta !== imp) suAltriDischi.push({ k, disco: altrove });
+      continue;
+    }
     const prec = manifesto.gruppi[k];
     const presenti = prec && (await Promise.all(prec.zip.map((z) => esiste(path.join(dest, z))))).every(Boolean);
-    if (completo || !prec || prec.impronta !== imp || !presenti) daFare.push({ k, lista, imp });
+    if (completo || !prec || prec.impronta !== imp || !presenti) {
+      candidati.push({ k, lista, imp, byte: lista.reduce((t, f) => t + f.dimensione, 0), giaQui: Boolean(prec && presenti) });
+    }
   }
   // Mesi spariti dall'archivio: li lascio nel backup (non si cancella mai nulla), ma li segnalo.
   const orfani = Object.keys(manifesto.gruppi).filter((k) => !gruppi.has(k));
 
-  const byteDaScrivere = daFare.reduce((s, g) => s + g.lista.reduce((t, f) => t + f.dimensione, 0), 0);
-  const sf = await fsp.statfs(dest).catch(() => null);
-  if (sf && sf.bavail * sf.bsize < byteDaScrivere * 1.02 + 50 * 1024 ** 2) {
-    throw new Error(`Spazio insufficiente sul disco di backup: servono ${byteDaScrivere ? byteLeggibili(byteDaScrivere) : '?'}, liberi ${byteLeggibili(sf.bavail * sf.bsize)}.`);
+  // Riempio il disco con quello che entra (prima il registro e i mesi già su questo disco, poi i nuovi in ordine);
+  // il resto aspetta un altro disco.
+  candidati.sort((a, b) => (b.k === 'Registro') - (a.k === 'Registro') || b.giaQui - a.giaQui || a.k.localeCompare(b.k));
+  const spazio = async () => { const l = await leggiLibero(dest); return l === null ? Infinity : l - MARGINE_DISCO; };
+  let disponibile = await spazio();
+  const daFare = [];
+  const restano = [];
+  for (const g of candidati) {
+    const serve = g.byte * 1.01 + 64 * 1024;
+    if (serve <= disponibile) { daFare.push(g); disponibile -= serve; if (g.giaQui) disponibile += manifesto.gruppi[g.k]?.byte || 0; }
+    else if (g.k !== 'Registro') restano.push(g); // il registro (copia su ogni disco) non fa dire "disco pieno"
   }
+  if (restano.length) {
+    emetti({ t: 'messaggio', testo: `Il disco non basta per tutto: salvo ${daFare.length} archivi, ${restano.length} aspetteranno un altro disco.` });
+  }
+  const byteDaScrivere = daFare.reduce((s, g) => s + g.byte, 0);
 
   const totFile = daFare.reduce((s, g) => s + g.lista.length, 0);
   emetti({ t: 'backup_piano', gruppi: daFare.map((g) => ({ k: g.k, n: g.lista.length })), invariati: gruppi.size - daFare.length,
@@ -161,10 +213,12 @@ export async function backup(cfg, { destinazione, completo = false, emetti = () 
   let byteFatti = 0;
   const esiti = [];
   for (const g of daFare) {
+    if (!g.giaQui && (await spazio()) < g.byte * 1.01) { if (g.k !== 'Registro') restano.push(g); continue; } // controllo vero prima di ogni mese
     const parti = dividiInParti(g.lista);
     const nomi = parti.map((_, i) => nomeZip(g.k, i, parti.length));
     emetti({ t: 'zip_inizio', k: g.k, n: g.lista.length, parti: parti.length });
     let errore = null;
+    let pieno = false;
     let byteGruppo = 0;
     for (let i = 0; i < parti.length && !errore; i++) {
       const finale = path.join(dest, nomi[i]);
@@ -190,7 +244,14 @@ export async function backup(cfg, { destinazione, completo = false, emetti = () 
       } catch (e) {
         await fsp.rm(tmp, { force: true }).catch(() => {});
         errore = e.message;
+        pieno = e.code === 'ENOSPC';
       }
+    }
+    if (pieno && !g.giaQui) { // disco pieno a metà: quel mese aspetta un altro disco (le parti già scritte le tolgo)
+      for (const n of nomi) await fsp.rm(path.join(dest, n), { force: true }).catch(() => {});
+      if (g.k !== 'Registro') restano.push(g);
+      emetti({ t: 'zip_fine', k: g.k, ok: false, errore: 'disco pieno: lo salverò su un altro disco', byte: 0 });
+      continue;
     }
     if (!errore) {
       // Elimino solo eventuali parti in più di un backup precedente dello stesso mese (ormai sostituite).
@@ -199,6 +260,10 @@ export async function backup(cfg, { destinazione, completo = false, emetti = () 
       }
       manifesto.gruppi[g.k] = { impronta: g.imp, zip: nomi, file: g.lista.length, byte: byteGruppo, quando: new Date().toISOString() };
       await scriviJSON(fileManifesto, manifesto);
+      if (g.k !== 'Registro') {
+        dischi.gruppi[g.k] = { disco: id, impronta: g.imp, quando: manifesto.gruppi[g.k].quando };
+        await scriviJSON(fileDischi, dischi).catch(() => {});
+      }
     }
     esiti.push({ k: g.k, ok: !errore, errore, file: g.lista.length, zip: nomi });
     emetti({ t: 'zip_fine', k: g.k, ok: !errore, errore, byte: byteGruppo });
@@ -207,9 +272,17 @@ export async function backup(cfg, { destinazione, completo = false, emetti = () 
   manifesto.ultimoBackup = new Date().toISOString();
   manifesto.archivio = cfg.archivio;
   await scriviJSON(fileManifesto, manifesto);
+  const libero = await leggiLibero(dest);
+  dischi.dischi[id] = { ...dischi.dischi[id], unita: radiceDest, ultimaVolta: manifesto.ultimoBackup, liberi: libero };
+  dischi.restano = { gruppi: restano.length, file: restano.reduce((s, g) => s + g.lista.length, 0), byte: restano.reduce((s, g) => s + g.byte, 0) };
+  await scriviJSON(fileDischi, dischi).catch(() => {});
+  const salvati = esiti.filter((e) => e.ok);
   const riepilogo = {
-    quando: manifesto.ultimoBackup, destinazione: dest, aggiornati: esiti.filter((e) => e.ok).length,
-    invariati: gruppi.size - daFare.length, errori: esiti.filter((e) => !e.ok), file: totFile, byte: byteDaScrivere, orfani,
+    quando: manifesto.ultimoBackup, destinazione: dest, disco: manifesto.numero, dischiTotali: Object.keys(dischi.dischi).length,
+    aggiornati: salvati.length, invariati: gruppi.size - candidati.length - nAltrove, suAltroDisco: nAltrove,
+    errori: esiti.filter((e) => !e.ok), file: salvati.reduce((s, e) => s + e.file, 0),
+    byte: daFare.filter((g) => !restano.includes(g)).reduce((s, g) => s + g.byte, 0), orfani,
+    restano: dischi.restano, suAltriDischi, liberi: libero,
   };
   await scriviJSON(path.join(cfg.archivio, '_JARVIS', 'ultimo_backup.json'), riepilogo);
   return riepilogo;
@@ -253,7 +326,9 @@ export async function verificaBackup(cfg, { destinazione, profonda = false, emet
     risultati.push({ k, ok: !problemi.length, problemi: problemi.slice(0, 5), aggiornato });
     emetti({ t: 'verifica_gruppo', k, ok: !problemi.length, aggiornato });
   }
-  const nonSalvati = [...gruppi.keys()].filter((k) => !manifesto.gruppi[k]);
+  const dischi = await leggiRegistroDischi(cfg);
+  const suAltroDisco = (k) => dischi.gruppi[k] && dischi.gruppi[k].disco !== manifesto.idDisco && dischi.dischi[dischi.gruppi[k].disco];
+  const nonSalvati = [...gruppi.keys()].filter((k) => !manifesto.gruppi[k] && !suAltroDisco(k));
   return {
     destinazione: dest, ultimoBackup: manifesto.ultimoBackup, controllati: risultati.length,
     integri: risultati.filter((r) => r.ok).length, danneggiati: risultati.filter((r) => !r.ok),

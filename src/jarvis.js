@@ -17,7 +17,7 @@ import { contaMultimediali, sentinellaInEsecuzione, SOGLIA_SPAZIO_BASSO } from '
 import { leggiJSON, numero, byteLeggibili, saluto, nomeSicuro, cartellaMese, ora, esiste, inParallelo } from './util.js';
 import { tipoDi } from './agenti/esploratore.js';
 
-export const VERSIONE = '2.0.1';
+export const VERSIONE = '2.1.0';
 const MARGINE_SPAZIO = 1024 ** 3; // dopo un'importazione devono restare almeno 1 GB liberi
 
 export class Jarvis {
@@ -315,10 +315,12 @@ export class Jarvis {
     const lavoro = (async () => {
       try {
         this.regista.parla(`${saluto(this.cfg.nome)}. Avvio il protocollo di backup.`);
-        const r = await backup(this.cfg, { destinazione, completo, emetti: this.emetti });
-        const fine = { modo: 'backup', esito: r.errori.length ? 'parziale' : 'ok', ...r };
+        const r = await backup(this.cfg, { destinazione, completo, emetti: this.emetti, ...(this.leggiLiberoBackup ? { leggiLibero: this.leggiLiberoBackup } : {}) });
+        const pieno = r.restano?.gruppi > 0;
+        const fine = { modo: 'backup', esito: r.errori.length ? 'parziale' : pieno ? 'pieno' : 'ok', ...r };
         this.regista.parla(r.errori.length ? 'Backup completato con alcuni errori. Controlla il riepilogo.'
-          : r.aggiornati ? `Backup completato e verificato. ${r.aggiornati} archivi aggiornati.` : 'Il backup era già aggiornato.');
+          : pieno ? `Il disco ${r.disco} è pieno. Ho salvato quello che entrava: per il resto collega un altro disco.`
+            : r.aggiornati ? `Backup completato e verificato. ${r.aggiornati} archivi aggiornati.` : 'Il backup era già aggiornato.');
         this.#chiudi(fine);
         return fine;
       } catch (e) {
@@ -356,6 +358,9 @@ export class Jarvis {
     if (!ui && !ub) return null;
     if (!ub) return { daFare: true, giorni: null, testo: 'Non hai ancora fatto nessun backup delle foto: collega l\'hard disk esterno e fai il backup (icona JARVIS Foto, tasto 3).' };
     const giorni = Math.floor((Date.now() - new Date(ub.quando)) / 86400000);
+    if (ub.restano?.gruppi > 0) {
+      return { daFare: true, giorni, restano: ub.restano, testo: `Il backup non è finito: restano ${byteLeggibili(ub.restano.byte)} (${numero(ub.restano.file)} file) che non entravano nel disco ${ub.disco || ''}. Collega un altro disco con spazio libero: JARVIS ti chiede se continuare lì.`.replace('  ', ' ') };
+    }
     const novita = ui && new Date(ui.quando) > new Date(ub.quando) && ui.archiviati > 0;
     if (giorni >= 30) return { daFare: true, giorni, testo: `L'ultimo backup è di ${giorni} giorni fa: è ora di aggiornarlo.` };
     if (novita && giorni >= 7) return { daFare: true, giorni, testo: `Ci sono foto nuove e l'ultimo backup è di ${giorni} giorni fa.` };

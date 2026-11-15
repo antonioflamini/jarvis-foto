@@ -255,6 +255,22 @@ export class Sentinella {
 
     const info = await this.info(radice);
     const haDCIM = fs.existsSync(path.join(radice, 'DCIM'));
+
+    // Backup rimasto a metà perché il disco era pieno: propone di continuare su questo nuovo disco.
+    const restano = !haDCIM && j.archivioDisponibile() && (await j.promemoriaBackup().catch(() => null))?.restano;
+    if (restano?.gruppi > 0) {
+      const sf = await fsp.statfs(radice).catch(() => null);
+      const libero = sf ? sf.bavail * sf.bsize : 0;
+      if (libero > 2 * 1024 ** 3) {
+        j.regista.parla('Il backup non era finito. Vuoi continuarlo su questo disco?');
+        const si = await this.chiedi(`Il backup non era finito: restano ${byteLeggibili(restano.byte)} (${numero(restano.file)} file).\n\n` +
+          `Lo continuo su questo disco (${radice.replace(/\\$/, '')}${info.nome ? ` ${info.nome}` : ''}, liberi ${byteLeggibili(libero)})?\n\n` +
+          'Salvo quello che entra; il disco diventa il disco di backup successivo.');
+        if (!si) return { azione: 'rifiutata' };
+        j.backup({ destinazione: radice }).catch(() => {});
+        return { azione: 'backup-continua' };
+      }
+    }
     if (info.tipo !== 2 && !haDCIM) return { azione: 'ignorata', motivo: 'non è una scheda o chiavetta' };
     const n = await contaMultimediali(radice);
     if (!n) return { azione: 'ignorata', motivo: 'nessuna foto' };

@@ -148,6 +148,9 @@ function avviaVassoio() {
     setTimeout(() => aggiorna().catch(() => {}), 2000);
     if (e.modo === 'importa' && e.esito === 'ok') v.avviso('Importazione completata', `${numero(e.archiviati)} file archiviati${e.doppioni ? `, ${numero(e.doppioni)} doppioni scartati` : ''}. Clicca qui per vederli nella galleria.`);
     if (e.modo === 'backup' && e.esito === 'ok') v.avviso('Backup completato', 'Backup aggiornato e verificato. Puoi spegnere il disco.');
+    if (e.modo === 'backup' && e.esito === 'pieno') {
+      v.avviso(`Disco ${e.disco} pieno`, `Salvato quello che entrava. Restano ${byteLeggibili(e.restano.byte)}: collega un altro disco e JARVIS ti chiede se continuare lì.`);
+    }
   });
   return v;
 }

@@ -413,8 +413,12 @@ function fine(e){
       celle=[['Archiviati',e.archiviati],['Doppioni',e.doppioni],['Da scegliere',e.simili||0],['Video',e.video],['Live Photo',e.livePhoto||0],['Screenshot',e.screenshot],['Giornate',(e.giornate||[]).length],['Luoghi',(e.luoghi||[]).length],['Spazio',byte(e.byte)]]; percorso=e.registro?('Registro: '+e.registro):''; }
   } else if(e.modo==='backup'){
     if(e.esito==='errore'){ titolo='BACKUP NON RIUSCITO'; sotto=e.errore; }
+    else if(e.esito==='pieno'){ titolo=`DISCO ${e.disco||''} PIENO`; sotto='Ho salvato e verificato quello che entrava: per il resto collega un altro disco'; progresso(1);
+      celle=[['Disco n.',e.disco||1],['Salvati ora',e.aggiornati],['File salvati',e.file],['Dati scritti',byte(e.byte)],['Restano',byte(e.restano.byte)],['File in attesa',e.restano.file]]; percorso=e.destinazione;
+      e.promemoria=`Collega un altro disco con spazio libero: JARVIS ti chiede se continuare lì (restano ${e.restano.gruppi} archivi). Scrivi "${e.disco}" sull'etichetta di questo disco.`; }
     else { titolo=e.esito==='parziale'?'BACKUP PARZIALE':'BACKUP COMPLETATO'; sotto=e.aggiornati?'Archivi scritti e verificati uno per uno':'Il backup era già aggiornato'; progresso(1);
-      celle=[['Aggiornati',e.aggiornati],['Invariati',e.invariati],['Errori',e.errori.length],['File salvati',e.file],['Dati scritti',byte(e.byte)],['Mesi orfani',(e.orfani||[]).length]]; percorso=e.destinazione; }
+      celle=[['Aggiornati',e.aggiornati],['Invariati',e.invariati],['Errori',e.errori.length],['File salvati',e.file],['Dati scritti',byte(e.byte)],[e.dischiTotali>1?'Disco n.':'Mesi orfani',e.dischiTotali>1?e.disco:(e.orfani||[]).length]]; percorso=e.destinazione;
+      if((e.suAltriDischi||[]).length) e.promemoria=`${e.suAltriDischi.length} mesi cambiati stanno su un altro disco (n. ${[...new Set(e.suAltriDischi.map(x=>x.disco))].join(', ')}): collegalo per aggiornarli.`; }
   } else if(e.modo==='verifica'){
     if(e.esito==='errore'){ titolo='VERIFICA NON RIUSCITA'; sotto=e.errore; }
     else { titolo=e.esito==='ok'?'BACKUP INTEGRO':'ATTENZIONE'; sotto=e.esito==='ok'?'Tutti gli archivi sono leggibili e completi':'Alcuni archivi hanno problemi: rifai il backup'; progresso(1);
