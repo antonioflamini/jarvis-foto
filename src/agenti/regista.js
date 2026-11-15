@@ -12,6 +12,7 @@ import { miniaturaEXIF } from './simili.js';
 
 const PAGINA = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'hud', 'index.html');
 const FONT = path.join(path.dirname(PAGINA), 'font');
+const VERSIONE_PROGRAMMA = (() => { try { return JSON.parse(fs.readFileSync(path.join(path.dirname(PAGINA), '..', '..', 'package.json'), 'utf8')).version; } catch { return ''; } })();
 const DIRETTE = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.bmp']);
 
 export class Regista extends EventEmitter {
@@ -54,7 +55,7 @@ export class Regista extends EventEmitter {
     }
     if (u.pathname === '/') {
       r.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      return fs.createReadStream(PAGINA).pipe(r);
+      return r.end((await fsp.readFile(PAGINA, 'utf8')).replaceAll('__VERSIONE__', VERSIONE_PROGRAMMA));
     }
     const font = u.pathname.match(/^\/font\/([a-z0-9-]+\.woff2)$/);
     if (font && fs.existsSync(path.join(FONT, font[1]))) {

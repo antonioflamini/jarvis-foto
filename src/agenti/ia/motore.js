@@ -12,6 +12,7 @@ import { Tokenizzatore } from './tokenizzatore.js';
 import { ingressoRilevatore, decodificaVolti, voltoAllineato, normalizza as normalizzaVolto, raggruppa } from './volti.js';
 import { anteprimaRaw } from '../galleria.js';
 import { miniaturaEXIF } from '../simili.js';
+import { RADICE_PROGETTO } from '../../config.js';
 
 export const VERSIONE_MODELLO = 'uform-vl-multilingual-v1';
 export const VERSIONE_VOLTI = 'yunet-sface-1';
@@ -34,8 +35,19 @@ const LATO_LAVORO = 1280;
 const SOGLIA_GRUPPO = 0.52; // prudente: meglio due gruppi della stessa persona (si uniscono dando lo stesso nome) che due persone mischiate
 const RAW = /\.(nef|nrw|cr2|cr3|arw|srw|raf|orf|rw2|pef|dng)$/i;
 
+const presentiIn = (dir) => FILE_MODELLO.every((f) => {
+  try { return fs.statSync(path.join(dir, f.nome)).size === f.byte; } catch { return false; }
+});
+
 export function cartellaModelli() {
-  return process.env.JARVIS_IA_MODELLI || path.join(process.env.LOCALAPPDATA || os.homedir(), 'JARVIS-Foto-IA');
+  if (process.env.JARVIS_IA_MODELLI) return process.env.JARVIS_IA_MODELLI;
+  // Più posti possibili: se JARVIS parte con un ambiente diverso (es. dopo un aggiornamento) li ritrova lo stesso.
+  const candidati = [
+    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'JARVIS-Foto-IA'),
+    path.join(RADICE_PROGETTO, '..', 'JARVIS-Foto-IA'), // accanto alla cartella del programma
+    path.join(os.homedir(), 'AppData', 'Local', 'JARVIS-Foto-IA'),
+  ].filter(Boolean).map((c) => path.resolve(c));
+  return candidati.find(presentiIn) || candidati[0];
 }
 
 function normalizza(v) {
@@ -54,6 +66,7 @@ export class MotoreIA {
   constructor(jarvis, opz = {}) {
     this.jarvis = jarvis;
     this.dir = opz.cartella || cartellaModelli();
+    this.cartellaFissa = Boolean(opz.cartella);
     this.sessioni = null;
     this.impronte = null; // Map rel → Float32Array(256)
     this.volti = null; // Map rel → [{b:[x,y,w,h] in 0-1, e:Float32Array(128)}]
@@ -69,7 +82,8 @@ export class MotoreIA {
   get filePersone() { return this.#file('persone.json'); }
 
   modelliPresenti() {
-    return FILE_MODELLO.every((f) => { try { return fs.statSync(path.join(this.dir, f.nome)).size === f.byte; } catch { return false; } });
+    if (!this.cartellaFissa && !presentiIn(this.dir)) this.dir = cartellaModelli(); // ricontrollo i posti possibili
+    return presentiIn(this.dir);
   }
 
   /** Scarica i modelli che mancano (una volta sola), con verifica SHA-256. */
@@ -273,9 +287,14 @@ export class MotoreIA {
       await this.#caricaPersone();
       const tutte = (await this.jarvis.galleria.tutti()).filter((v) => v.tipo === 'foto');
       const presenti = new Set(tutte.map((v) => v.p));
+      const prima = impronte.size + volti.size;
       for (const rel of [...impronte.keys()]) if (!presenti.has(rel)) impronte.delete(rel); // foto spostate o tolte
       for (const rel of [...volti.keys()]) if (!presenti.has(rel)) volti.delete(rel);
       const daFare = tutte.filter((v) => !impronte.has(v.p) || !volti.has(v.p));
+      if (!daFare.length && impronte.size + volti.size === prima) { // niente di nuovo: non riscrivo i file
+        this.stato.totali = this.stato.indicizzate = tutte.length;
+        return this.stato;
+      }
       this.stato.totali = tutte.length;
       this.stato.indicizzate = tutte.length - daFare.length;
       let nonSalvate = 0;

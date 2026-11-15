@@ -150,9 +150,10 @@ body.backup .palco,body.verifica .palco{opacity:0;transition:opacity .4s}
 
 <div class="app">
   <header class="top">
-    <div class="logo">J.A.R.V.I.S.<small>Archivio foto personale</small></div>
+    <div class="logo">J.A.R.V.I.S.<small>Archivio foto personale · v__VERSIONE__</small></div>
     <div class="chip" id="chip"><i></i>IN ATTESA</div>
     <a class="chip" href="/galleria" style="text-decoration:none;cursor:pointer" title="Sfoglia l'archivio">▦ GALLERIA</a>
+    <a class="chip" href="/galleria#persone" style="text-decoration:none;cursor:pointer" title="Volti e persone">☺ PERSONE</a>
     <div class="orologio"><span id="ora">--:--:--</span><small id="data">—</small></div>
   </header>
 
@@ -233,7 +234,7 @@ setInterval(() => { const d=new Date(); $('#ora').textContent=d.toLocaleTimeStri
 const mmss = (s) => { s=Math.max(0,Math.round(s)); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return (h? h+':'+String(m).padStart(2,'0') : String(m).padStart(2,'0'))+':'+String(x).padStart(2,'0'); };
 
 // ---------------- Sequenza di avvio ----------------
-const righeAvvio = ['> INIZIALIZZAZIONE J.A.R.V.I.S. ............ v1.0','> AGENTE ESPLORATORE ...................... ONLINE','> AGENTE ARCHIVISTA ....................... ONLINE','> AGENTE CUSTODE .......................... ONLINE','> AGENTE REGISTA .......................... ONLINE','> COLLEGAMENTO AL NUCLEO ................... OK','','  SISTEMA PRONTO.'];
+const righeAvvio = ['> INIZIALIZZAZIONE J.A.R.V.I.S. ............ v__VERSIONE__','> AGENTE ESPLORATORE ...................... ONLINE','> AGENTE ARCHIVISTA ....................... ONLINE','> AGENTE CUSTODE .......................... ONLINE','> AGENTE REGISTA .......................... ONLINE','> AGENTE IA (RICERCA E VOLTI) ............. ONLINE','> COLLEGAMENTO AL NUCLEO ................... OK','','  SISTEMA PRONTO.'];
 (async function avvio(){
   const pre=$('#avvioTesto'); if(ridotto){ $('#avvio').remove(); return; }
   for (const r of righeAvvio){ pre.textContent += r+'\n'; await new Promise(z=>setTimeout(z,150)); }
