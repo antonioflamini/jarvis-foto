@@ -427,6 +427,37 @@ try {
     assert.equal(r.archiviati, 0, 'l\'indice segue la cartella rinominata');
   });
 
+  await prova('il disco dell\'archivio cambia lettera: JARVIS lo ritrova', async () => {
+    const primo = path.join(tmp, 'lettera_E', 'JARVIS_Foto');
+    const altro = path.join(tmp, 'lettera_G', 'JARVIS_Foto'); // un archivio diverso: non va confuso
+    const nuovo = path.join(tmp, 'lettera_F', 'JARVIS_Foto');
+    const j4 = new Jarvis(caricaConfig({ archivio: primo, arrivi: path.join(tmp, 'pc4', 'Arrivi'), effetti: false, voce: false }));
+    try {
+      scrivi(j4.cfg.arrivi, 'foto.jpg', jpeg({ data: '2026:04:04 10:00:00', seme: 4040 }));
+      const r = await j4.importaArrivi();
+      assert.equal(r.esito, 'ok', r.errore);
+      assert.ok(j4.archivioDisponibile());
+      const id = fs.readFileSync(path.join(primo, '_JARVIS', 'id_archivio.txt'), 'utf8');
+      assert.ok(id.length >= 8);
+      fs.mkdirSync(path.join(altro, '_JARVIS'), { recursive: true });
+      fs.writeFileSync(path.join(altro, '_JARVIS', 'indice.json'), '{"file":{}}');
+      fs.writeFileSync(path.join(altro, '_JARVIS', 'id_archivio.txt'), 'archivio-di-un-altro');
+      fs.mkdirSync(path.dirname(nuovo), { recursive: true });
+      fs.renameSync(primo, nuovo); // il disco torna con un'altra lettera
+      j4.cercaArchivioIn = () => [altro, nuovo];
+      const messaggi = [];
+      j4.regista.on('evento', (e) => e.t === 'messaggio' && messaggi.push(e.testo));
+      assert.equal(j4.archivioDisponibile(true), true);
+      assert.equal(j4.cfg.archivio, path.resolve(nuovo), 'segue l\'archivio giusto, non quello dell\'altro');
+      assert.ok(messaggi.some((m) => /cambiato lettera/.test(m)));
+      fs.rmSync(path.join(nuovo), { recursive: true }); // disco spento: non c'è da nessuna parte
+      j4.cercaArchivioIn = () => [altro];
+      assert.equal(j4.archivioDisponibile(true), false);
+    } finally {
+      j4.regista.chiudi();
+    }
+  });
+
   await prova('archivio su disco esterno spento: Arrivi sul PC aspetta il disco', async () => {
     const j2 = new Jarvis(caricaConfig({ archivio: path.join(tmp, 'disco_archivio', 'JARVIS_Foto'), arrivi: path.join(tmp, 'pc', 'Arrivi'), effetti: false, voce: false }));
     try {

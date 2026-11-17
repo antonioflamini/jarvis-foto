@@ -105,7 +105,7 @@ function avviaVassoio() {
         } catch (e) { v.avviso('Scaricamento non riuscito', e.message); }
         return null;
       case 'backup':
-        if (!cfg.backup) return v.avviso('Backup non impostato', 'Collega il disco del backup, poi apri JARVIS Foto (menu completo) e scegli 3.');
+        if (!jarvis.trovaDiscoBackup()) return v.avviso('Backup non impostato', 'Collega il disco del backup, poi apri JARVIS Foto (menu completo) e scegli 3.');
         return jarvis.backup().then((r) => { if (r.esito === 'errore') v.avviso('Backup non riuscito', r.errore); });
       case 'menu':
         try {

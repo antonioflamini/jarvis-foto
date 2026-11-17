@@ -239,6 +239,7 @@ export class Sentinella {
 
   async valuta(radice) {
     const j = this.jarvis;
+    j.archivioDisponibile(true); // se il disco dell'archivio ha cambiato lettera, lo ritrovo prima di decidere
     const archivio = path.resolve(j.cfg.archivio).toLowerCase();
     if (archivio.startsWith(path.resolve(radice).toLowerCase())) return { azione: 'ignorata', motivo: 'contiene l\'archivio' };
 

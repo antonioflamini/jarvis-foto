@@ -5,6 +5,8 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
+import { RADICE_PROGETTO } from './config.js';
 import { esplora, rilevaSupporti, eseguiPowerShell } from './agenti/esploratore.js';
 import {
   Indice, pianifica, esegui, statisticheArchivio, rinominaGiornata, annullaUltima, elencaDaScegliere, spostaSicuro, CARTELLE_ARCHIVIO,
@@ -17,7 +19,7 @@ import { contaMultimediali, sentinellaInEsecuzione, SOGLIA_SPAZIO_BASSO } from '
 import { leggiJSON, numero, byteLeggibili, saluto, nomeSicuro, cartellaMese, ora, esiste, inParallelo } from './util.js';
 import { tipoDi } from './agenti/esploratore.js';
 
-export const VERSIONE = '2.1.0';
+export const VERSIONE = '2.1.1';
 const MARGINE_SPAZIO = 1024 ** 3; // dopo un'importazione devono restare almeno 1 GB liberi
 
 export class Jarvis {
@@ -47,8 +49,66 @@ export class Jarvis {
   }
 
   /** L'archivio è raggiungibile? (falso se è su un disco esterno spento o scollegato) */
-  archivioDisponibile() {
-    return fs.existsSync(this.cfg.archivio);
+  archivioDisponibile(forza = false) {
+    if (fs.existsSync(this.cfg.archivio)) { this.#ricordaIdArchivio(); return true; }
+    return this.#ritrovaArchivio(forza);
+  }
+
+  // Ogni archivio ha un'impronta (_JARVIS/id_archivio.txt): serve a riconoscerlo se il disco cambia lettera.
+  #ricordaIdArchivio() {
+    if (this.idArchivio) return;
+    const file = path.join(this.cfg.archivio, '_JARVIS', 'id_archivio.txt');
+    try {
+      this.idArchivio = fs.readFileSync(file, 'utf8').trim();
+    } catch {
+      if (!fs.existsSync(path.join(this.cfg.archivio, '_JARVIS'))) return; // archivio ancora vuoto
+      this.idArchivio = crypto.randomBytes(8).toString('hex');
+      try { fs.writeFileSync(file, this.idArchivio); } catch { this.idArchivio = null; }
+    }
+  }
+
+  /** Posti dove cercare l'archivio se non è più dove era: stessa cartella su un'altra lettera di unità. */
+  cercaArchivioIn() {
+    const { root } = path.parse(this.cfg.archivio);
+    if (process.platform !== 'win32' || !/^[a-z]:\\$/i.test(root)) return [];
+    const resto = this.cfg.archivio.slice(root.length);
+    return [...'DEFGHIJKLMNOPQRSTUVWXYZ'].map((l) => `${l}:\\${resto}`)
+      .filter((c) => c.toLowerCase() !== this.cfg.archivio.toLowerCase());
+  }
+
+  // Il disco esterno ha preso un'altra lettera (es. E: → F:)? Se trovo lo stesso archivio, lo seguo.
+  #ritrovaArchivio(forza) {
+    const adesso = Date.now();
+    if (!forza && adesso - (this.ultimaRicercaArchivio || 0) < 5000) return false; // al massimo una ricerca ogni 5 secondi
+    this.ultimaRicercaArchivio = adesso;
+    for (const c of this.cercaArchivioIn()) {
+      if (!fs.existsSync(path.join(c, '_JARVIS', 'indice.json'))) continue;
+      let id = null;
+      try { id = fs.readFileSync(path.join(c, '_JARVIS', 'id_archivio.txt'), 'utf8').trim(); } catch { /* archivio di una versione precedente */ }
+      if (this.idArchivio && id && id !== this.idArchivio) continue; // è un altro archivio
+      this.#spostaArchivio(path.resolve(c));
+      return true;
+    }
+    return false;
+  }
+
+  #spostaArchivio(nuovo) {
+    const vecchio = this.cfg.archivio;
+    const discoPrima = this.discoArchivio;
+    if (this.#arriviNellArchivio()) this.cfg.arrivi = path.join(nuovo, path.relative(vecchio, this.cfg.arrivi));
+    this.cfg.archivio = nuovo;
+    this.regista.stato.archivio = nuovo;
+    this.#ricordaIdArchivio();
+    // Lo scrivo anche nelle impostazioni, così al prossimo avvio è già giusto.
+    const fileConfig = path.join(RADICE_PROGETTO, 'jarvis.config.json');
+    try {
+      const f = JSON.parse(fs.readFileSync(fileConfig, 'utf8'));
+      if (f.archivio && path.resolve(f.archivio).toLowerCase() === path.resolve(vecchio).toLowerCase()) {
+        f.archivio = nuovo;
+        fs.writeFileSync(fileConfig, JSON.stringify(f, null, 4));
+      }
+    } catch { /* impostazioni non scrivibili: lo ritrovo comunque a ogni avvio */ }
+    this.emetti({ t: 'messaggio', testo: `Il disco dell'archivio ha cambiato lettera (${discoPrima} → ${this.discoArchivio}): l'ho ritrovato.` });
   }
 
   get discoArchivio() {
@@ -310,7 +370,20 @@ export class Jarvis {
 
   // ---------- Backup ----------
 
+  /** Il disco del backup impostato non c'è (lettera cambiata?): cerco un disco con un backup JARVIS. */
+  trovaDiscoBackup() {
+    if (this.cfg.backup && fs.existsSync(this.cfg.backup)) return this.cfg.backup;
+    if (process.platform !== 'win32') return this.cfg.backup;
+    const archivio = this.discoArchivio.toLowerCase();
+    for (const l of 'DEFGHIJKLMNOPQRSTUVWXYZ') {
+      if (`${l}:`.toLowerCase() === archivio) continue;
+      if (fs.existsSync(`${l}:\\JARVIS_Backup\\backup_jarvis.json`)) return `${l}:\\`;
+    }
+    return this.cfg.backup;
+  }
+
   async backup({ destinazione, completo = false, effetti, attesaMax = 0 } = {}) {
+    destinazione = destinazione || this.trovaDiscoBackup() || undefined;
     await this.#prepara('backup', { destinazione: destinazione || this.cfg.backup, completo }, effetti);
     const lavoro = (async () => {
       try {
@@ -334,7 +407,7 @@ export class Jarvis {
   }
 
   async verifica({ destinazione, profonda = false, effetti, attesaMax = 0 } = {}) {
-    await this.#prepara('verifica', { destinazione: destinazione || this.cfg.backup, profonda }, effetti);
+    await this.#prepara('verifica', { destinazione: (destinazione = destinazione || this.trovaDiscoBackup() || undefined), profonda }, effetti);
     const lavoro = (async () => {
       try {
         const r = await verificaBackup(this.cfg, { destinazione, profonda, emetti: this.emetti });
