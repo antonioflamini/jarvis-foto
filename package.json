@@ -1,6 +1,6 @@
 {
   "name": "jarvis-foto",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "JARVIS Foto - archivista personale di foto e video: importa, ordina, rinomina e fa backup, con pannello olografico in tempo reale. Funziona in locale, anche da Claude Desktop.",
   "main": "src/server.js",
   "scripts": {

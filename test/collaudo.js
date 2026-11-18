@@ -351,6 +351,20 @@ try {
     assert.equal((await j.promemoriaBackup()).daFare, false);
   });
 
+  await prova('promemoria: foto nuove dopo il backup, anche se l\'ultima importazione era di soli doppioni', async () => {
+    const nuove = path.join(tmp, 'nuove_dopo_backup');
+    scrivi(nuove, 'nuova1.jpg', jpeg({ data: '2025:08:20 09:00:00', seme: 5151 }));
+    scrivi(nuove, 'nuova2.jpg', jpeg({ data: '2025:08:21 09:00:00', seme: 5252 }));
+    assert.equal((await j.importa(nuove)).archiviati, 2);
+    assert.equal((await j.importa(nuove)).archiviati, 0, 'la seconda volta sono doppioni');
+    const p = await j.promemoriaBackup();
+    assert.equal(p.daFare, true);
+    assert.equal(p.nuovi, 2);
+    assert.match(p.testo, /2 foto e video nuovi/);
+    assert.equal((await j.backup({ destinazione: disco })).errori.length, 0);
+    assert.equal((await j.promemoriaBackup()).daFare, false, 'dopo il backup il conto riparte da zero');
+  });
+
   await prova('sentinella: il disco del backup aggiornato non disturba', async () => {
     const s = new Sentinella(j, { chiedi: async () => { throw new Error('non doveva chiedere'); } });
     assert.equal((await s.valuta(disco)).azione, 'ignorata');

@@ -118,7 +118,7 @@ export class Sentinella {
     const fatti = [];
 
     const p = await j.promemoriaBackup().catch(() => null);
-    if (p?.daFare && (p.giorni === null || p.giorni >= 7) && scaduto('backup')) {
+    if (p?.daFare && (p.giorni === null || p.giorni >= 7 || p.nuovi >= 100 || p.restano) && scaduto('backup')) { // tante foto nuove: lo dico subito
       this.avvisa(`${p.testo}\n\nSe hai già fatto un backup con JARVIS, ti basta collegare il disco: ti chiederò io se aggiornarlo.`);
       j.regista.parla('Promemoria: è ora di fare il backup delle foto.');
       avvisi.backup = new Date(adesso).toISOString();

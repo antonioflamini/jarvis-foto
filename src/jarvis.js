@@ -19,7 +19,7 @@ import { contaMultimediali, sentinellaInEsecuzione, SOGLIA_SPAZIO_BASSO } from '
 import { leggiJSON, numero, byteLeggibili, saluto, nomeSicuro, cartellaMese, ora, esiste, inParallelo } from './util.js';
 import { tipoDi } from './agenti/esploratore.js';
 
-export const VERSIONE = '2.1.1';
+export const VERSIONE = '2.1.2';
 const MARGINE_SPAZIO = 1024 ** 3; // dopo un'importazione devono restare almeno 1 GB liberi
 
 export class Jarvis {
@@ -434,11 +434,37 @@ export class Jarvis {
     if (ub.restano?.gruppi > 0) {
       return { daFare: true, giorni, restano: ub.restano, testo: `Il backup non è finito: restano ${byteLeggibili(ub.restano.byte)} (${numero(ub.restano.file)} file) che non entravano nel disco ${ub.disco || ''}. Collega un altro disco con spazio libero: JARVIS ti chiede se continuare lì.`.replace('  ', ' ') };
     }
-    const novita = ui && new Date(ui.quando) > new Date(ub.quando) && ui.archiviati > 0;
-    if (giorni >= 30) return { daFare: true, giorni, testo: `L'ultimo backup è di ${giorni} giorni fa: è ora di aggiornarlo.` };
-    if (novita && giorni >= 7) return { daFare: true, giorni, testo: `Ci sono foto nuove e l'ultimo backup è di ${giorni} giorni fa.` };
-    if (novita) return { daFare: true, giorni, testo: 'Ci sono foto nuove non ancora salvate nel backup.' };
-    return { daFare: false, giorni, testo: `Backup aggiornato (${giorni === 0 ? 'oggi' : `${giorni} giorni fa`}).` };
+    // Conto TUTTE le importazioni dopo l'ultimo backup (non solo l'ultima, che magari era fatta solo di doppioni).
+    const nuovi = Math.max(await this.#nuoviDalBackup(ub.quando),
+      ui && new Date(ui.quando) > new Date(ub.quando) ? ui.archiviati || 0 : 0);
+    const quanti = `${numero(nuovi)} ${nuovi === 1 ? 'foto o video nuovo' : 'foto e video nuovi'}`;
+    if (giorni >= 30) return { daFare: true, giorni, nuovi, testo: `L'ultimo backup è di ${giorni} giorni fa: è ora di aggiornarlo.` };
+    if (nuovi && giorni >= 7) return { daFare: true, giorni, nuovi, testo: `Ci sono ${quanti} e l'ultimo backup è di ${giorni} giorni fa.` };
+    if (nuovi) return { daFare: true, giorni, nuovi, testo: `Ci sono ${quanti} non ancora salvati nel backup.` };
+    return { daFare: false, giorni, nuovi: 0, testo: `Backup aggiornato (${giorni === 0 ? 'oggi' : `${giorni} giorni fa`}).` };
+  }
+
+  // File archiviati dalle importazioni fatte dopo il backup (dai registri in _JARVIS/registro; quelli già letti restano in memoria).
+  async #nuoviDalBackup(quandoBackup) {
+    const dir = path.join(this.cfg.archivio, '_JARVIS', 'registro');
+    const limite = new Date(quandoBackup).getTime();
+    this.contiRegistro ??= new Map();
+    let n = 0;
+    for (const nome of await fsp.readdir(dir).catch(() => [])) {
+      if (!nome.endsWith('_importazione.json')) continue;
+      const file = path.join(dir, nome);
+      let c = this.contiRegistro.get(file);
+      if (!c) {
+        const st = await fsp.stat(file).catch(() => null);
+        if (!st || st.mtimeMs < limite - 3600000) continue; // registri vecchi: non serve aprirli
+        const r = await leggiJSON(file, null);
+        if (!r) continue;
+        c = { quando: new Date(r.quando).getTime(), archiviati: (r.voci || []).filter((v) => v.esito === 'archiviato').length };
+        this.contiRegistro.set(file, c);
+      }
+      if (c.quando > limite) n += c.archiviati;
+    }
+    return n;
   }
 
   // ---------- Consultazione ----------

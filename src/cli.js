@@ -135,7 +135,9 @@ function avviaVassoio() {
     } else {
       const n = await contaMultimediali(cfg.arrivi, 10000, 8, true).catch(() => 0);
       const b = await jarvis.promemoriaBackup().catch(() => null);
-      const backup = !b ? '' : b.giorni === null ? ' · backup: mai' : ` · backup: ${b.giorni === 0 ? 'oggi' : `${b.giorni} gg fa`}`;
+      const backup = !b ? '' : b.giorni === null ? ' · backup: mai'
+        : b.nuovi ? ` · ${numero(b.nuovi)} da salvare nel backup`
+          : b.restano ? ' · backup da finire' : ` · backup: ${b.giorni === 0 ? 'oggi' : `${b.giorni} gg fa`}`;
       t = `JARVIS · pronto${n ? ` · ${n} in Arrivi` : ''}${backup}`;
     }
     v.stato(t);
