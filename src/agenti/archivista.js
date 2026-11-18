@@ -536,9 +536,12 @@ export async function esegui(pianificazione, cfg, indice, { modalita = 'copia', 
   const csv = '﻿' + righe.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
   const dirRegistro = path.join(cfg.archivio, '_JARVIS', 'registro');
   await fsp.mkdir(dirRegistro, { recursive: true });
-  const fileRegistro = path.join(dirRegistro, `${timbroLotto}_importazione.csv`);
+  // Due importazioni nello stesso secondo non devono sovrascriversi il registro ("z" lo mette dopo nell'ordine).
+  let timbroRegistro = timbroLotto;
+  while (fs.existsSync(path.join(dirRegistro, `${timbroRegistro}_importazione.json`))) timbroRegistro += 'z';
+  const fileRegistro = path.join(dirRegistro, `${timbroRegistro}_importazione.csv`);
   await fsp.writeFile(fileRegistro, csv, 'utf8');
-  await scriviJSON(path.join(dirRegistro, `${timbroLotto}_importazione.json`), { quando: new Date().toISOString(), sorgente, modalita, voci });
+  await scriviJSON(path.join(dirRegistro, `${timbroRegistro}_importazione.json`), { quando: new Date().toISOString(), sorgente, modalita, voci });
   conteggi.luoghi = [...luoghi].slice(0, 20);
   const riepilogo = { quando: new Date().toISOString(), sorgente, modalita, totale: n, ...conteggi, registro: fileRegistro };
   await scriviJSON(path.join(cfg.archivio, '_JARVIS', 'ultima_importazione.json'), riepilogo);
